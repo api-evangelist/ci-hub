@@ -1,0 +1,37 @@
+# Access SDK
+> Documentation for the Access SDK.
+
+## Pages
+- [Changelog](/access/changelog): Notable changes to the Access SDK API and documentation.
+- [Client library](/access/client-library): The official TypeScript/JavaScript SDK. Install, authenticate, connect a DAM, and read assets without touching the wire.
+- [Getting started](/access/getting-started): The end-to-end path from partner registration to your first content call.
+- [CI HUB Access SDK](/access): Embed CI HUB asset connectivity into your platform with the client library or the HTTP API.
+- [Overview](/access/authentication): Token exchange model and the two-token pattern.
+- [Asset model](/access/concepts): Folders, assets, capabilities, and metadata as the content endpoints return them.
+- [Pagination](/access/concepts/pagination): The more cursor and the size parameter on folder browse and search.
+- [Asset URLs](/access/concepts/url-placeholders): How thumbnail and download URLs arrive in results, and how to resolve and fetch them.
+- [Errors](/access/errors): Error envelope and the full code catalog.
+- [Asset detail](/access/content/asset): GET /assets/asset/{assetId}, read a single asset's detail from a connected DAM.
+- [Asset versions](/access/content/assetversions): GET /assets/assetversions/{assetId}, version history for an asset.
+- [Folder browse](/access/content/folder): GET /assets/folder/{folderId}, list subfolders and assets at a folder.
+- [Content](/access/content): Read-only endpoints for browsing, searching, and reading DAM assets.
+- [Search by image](/access/content/search-by-image): POST /assets/search, find visually similar assets from a reference image.
+- [Search](/access/content/search): GET /assets/search, keyword search across a connected DAM.
+- [Browse a folder tree](/access/guides/browse-folder): Walk a connected DAM from the root, listing subfolders and assets at each level.
+- [Download an asset](/access/guides/download-asset): Take a download URL from a result, resolve it, fetch the bytes, and verify them.
+- [Handle token refresh](/access/guides/handle-token-refresh): Keep a session alive by refreshing the CI HUB and DAM tokens, and recover when one expires.
+- [Guides](/access/guides): Task walkthroughs for the common content operations, with client-library and raw HTTP samples.
+- [Search assets](/access/guides/search-assets): Run a keyword search, narrow it with the facets a DAM exposes, and page through the results.
+- [Check token](/access/authentication/ci-hub/check-token): Verify a CI HUB access token and read the current user envelope.
+- [Exchange token](/access/authentication/ci-hub/exchange-token): Exchange a partner-signed JWT for a CI HUB access token and refresh token.
+- [Logout](/access/authentication/ci-hub/logout): End the partner-side session and stop using the CI HUB tokens.
+- [Partner registration](/access/authentication/ci-hub/partner-registration): Handshake to enable token exchange for a partner platform.
+- [Refresh token](/access/authentication/ci-hub/refresh-token): Mint a new CI HUB access token using the refresh token returned at exchange.
+- [DAM connection](/access/authentication/dam): How a partner connects an end user to a DAM provider.
+- [DAM login](/access/authentication/dam/login): POST and GET /auth/login, initiate and poll a DAM provider login.
+- [Provider info](/access/authentication/dam/provider-info): GET /system/providerInfo, runtime details for a connected DAM provider.
+- [Providers](/access/authentication/dam/providers): GET /auth/providers, list DAM providers available to the authenticated user.
+- [Token refresh](/access/authentication/dam/refresh): Renew a DAM connection token, and what to do when a provider has no refresh.
+
+## Full text
+- [Full text](/access/llms-full.txt)

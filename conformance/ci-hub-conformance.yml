@@ -1,0 +1,197 @@
+generated: '2026-08-12'
+method: probed
+source: live probes plus https://developer.ci-hub.com/access
+note: >-
+  Standards posture across CI HUB's three surfaces. The split is sharp and worth naming: the MCP
+  server is built on current IETF authorization standards and advertises them correctly at
+  /.well-known/, while the REST API next to it uses a bespoke token exchange and a bespoke error
+  envelope. A partner integrating both meets two different standards postures from one vendor. No
+  security certification, audit report or compliance program (SOC 2, ISO 27001, TISAX, HIPAA) is
+  published anywhere on the public site — searched and not found, so no Compliance pointer is
+  emitted.
+standards:
+- id: oauth2
+  conforms: true
+  applies_to: ci-hub:mcp
+  evidence: >-
+    mcp.ci-hub.com is an OAuth 2.1 protected resource. It returns a compliant WWW-Authenticate
+    Bearer challenge carrying a resource_metadata pointer, and mcp-auth.ci-hub.com serves
+    authorization-server metadata declaring authorization_code + refresh_token grants, response
+    type code, and PKCE S256.
+  probe:
+    url: https://mcp-auth.ci-hub.com/.well-known/oauth-authorization-server
+    http_status: 200
+- id: rfc8414
+  name: OAuth 2.0 Authorization Server Metadata
+  conforms: true
+  applies_to: ci-hub:mcp
+  evidence: served at /.well-known/oauth-authorization-server on both mcp.ci-hub.com and
+    mcp-auth.ci-hub.com, with issuer, authorization_endpoint, token_endpoint, jwks_uri,
+    registration_endpoint and the supported grant/response/PKCE sets.
+  probe:
+    url: https://mcp.ci-hub.com/.well-known/oauth-authorization-server
+    http_status: 200
+- id: rfc9728
+  name: OAuth 2.0 Protected Resource Metadata
+  conforms: true
+  applies_to: ci-hub:mcp
+  evidence: >-
+    served at /.well-known/oauth-protected-resource with resource, authorization_servers,
+    bearer_methods_supported and resource_documentation. This is the discovery document the MCP
+    authorization spec requires and most MCP servers still omit.
+  probe:
+    url: https://mcp.ci-hub.com/.well-known/oauth-protected-resource
+    http_status: 200
+- id: rfc7591
+  name: OAuth 2.0 Dynamic Client Registration
+  conforms: true
+  applies_to: ci-hub:mcp
+  evidence: registration_endpoint https://mcp-auth.ci-hub.com/register is advertised, so an MCP
+    client can register itself without a manual credential exchange.
+- id: rfc7636
+  name: PKCE
+  conforms: true
+  applies_to: ci-hub:mcp
+  evidence: code_challenge_methods_supported is ["S256"] — S256 only, plain not offered.
+- id: oidc
+  name: OpenID Connect Discovery
+  conforms: partial
+  applies_to: ci-hub:mcp
+  evidence: >-
+    mcp-auth.ci-hub.com serves /.well-known/openid-configuration and declares
+    id_token_signing_alg_values_supported RS256, a userinfo_endpoint and claims sub/iss/aud/exp/
+    iat/scope. But the document is byte-identical to its OAuth metadata and omits the `openid`
+    scope entirely — the only scope advertised is `cihub`. It is an OAuth 2.1 server serving OIDC
+    discovery, not an OIDC provider.
+  probe:
+    url: https://mcp-auth.ci-hub.com/.well-known/openid-configuration
+    http_status: 200
+- id: mcp
+  name: Model Context Protocol
+  conforms: true
+  applies_to: ci-hub:mcp
+  evidence: >-
+    Hosted remote server at mcp.ci-hub.com with JSON-RPC over HTTP and an /sse path, spec-compliant
+    OAuth challenge, and a published tool catalogue of 21 tools. Live tools/list is auth-gated so
+    protocol version and capabilities could not be read anonymously.
+- id: rfc7519
+  name: JSON Web Token
+  conforms: true
+  applies_to: ci-hub:access-sdk
+  evidence: >-
+    Partner authentication is an RS256-signed JWT verified against the partner's published JWKS
+    with iss/aud/sub/iat/exp claim validation, a 30s future-iat tolerance and a maxTokenAge
+    ceiling. CI HUB's own access and refresh tokens are HS256 JWTs.
+- id: rfc7517
+  name: JSON Web Key Set
+  conforms: true
+  applies_to: ci-hub:access-sdk
+  evidence: >-
+    The partner registers a JWKS URL; CI HUB fetches and caches the published keys for 10 minutes
+    and treats them as the root of trust for that partner. `kid` in the JWT header must match a
+    key in the set.
+- id: oauth2
+  name: OAuth 2.0 (Access SDK)
+  conforms: false
+  applies_to: ci-hub:access-sdk
+  evidence: >-
+    The Access SDK does NOT use OAuth. It uses a proprietary token exchange (POST
+    /auth/exchangeToken) that is JWT-bearer-shaped but is not RFC 7523, has no OAuth metadata
+    document, no scopes, and no authorization endpoint. The DAM login flow behind it is OAuth at
+    the provider, not at CI HUB.
+- id: rfc9457
+  name: Problem Details for HTTP APIs
+  conforms: false
+  applies_to: ci-hub:access-sdk
+  evidence: >-
+    Errors are application/json with a bespoke envelope (error.status/code/source/message/details/
+    provider), not application/problem+json with type/title/detail/instance. The catalogue is well
+    documented — 28 codes — it simply is not the standard shape. See errors/ci-hub-problem-types.yml.
+- id: ratelimit-headers
+  name: IETF draft RateLimit header fields
+  conforms: true
+  applies_to: ci-hub:access-sdk
+  evidence: >-
+    Observed on live responses: RateLimit-Limit, RateLimit-Remaining, RateLimit-Reset and
+    RateLimit-Policy (7500;w=300), alongside the legacy X-RateLimit-* family. Retry-After is
+    documented on 429.
+  probe:
+    url: https://live.ci-hub.com/api/v1/system/providerInfo
+    http_status: 401
+- id: pagination
+  conforms: true
+  applies_to: ci-hub:access-sdk
+  evidence: >-
+    Opaque forward cursor (`more`) with a `size` page-size parameter, documented including the
+    end-detection rule and the caveat that the cursor pages assets but not folders.
+- id: idempotency
+  conforms: false
+  applies_to: ci-hub:access-sdk
+  evidence: >-
+    No idempotency key, header or replay-protection mechanism is documented anywhere in either
+    SDK. See conventions/ci-hub-conventions.yml.
+- id: openapi
+  conforms: partial
+  applies_to: ci-hub:access-sdk
+  evidence: >-
+    CI HUB builds its reference and its client types from an OpenAPI specification and says so in
+    print, but does not serve the document at any public URL — probed on the docs host, both API
+    hosts and the GitHub org, all 404. The contract in openapi/ is derived from the
+    openapi-typescript projection CI HUB does publish in @ci-hub/access-sdk.
+- id: rfc9116
+  name: security.txt
+  conforms: false
+  evidence: no /.well-known/security.txt on any of the six CI HUB hosts probed. See
+    well-known/ci-hub-well-known.yml.
+- id: a2a
+  name: A2A Agent Card
+  conforms: false
+  evidence: >-
+    No agent card at /.well-known/agent-card.json or /.well-known/agent.json on any host. CI HUB's
+    agent surface is MCP, not A2A.
+- id: asyncapi
+  conforms: false
+  evidence: >-
+    No event, webhook or streaming surface is documented on either SDK, so there is nothing an
+    AsyncAPI document would describe. Not a gap so much as a shape — this is a request/response
+    broker.
+- id: gdpr
+  conforms: unknown
+  evidence: >-
+    CI HUB GmbH is a German company operating on Azure West Europe with a published privacy policy
+    and imprint, so GDPR applies. No DPA, subprocessor list or data-residency statement was found
+    on the public site.
+certifications:
+  published: []
+  searched:
+  - SOC 2
+  - ISO 27001
+  - TISAX
+  - HIPAA
+  - PCI DSS
+  - FedRAMP
+  result: >-
+    None found. No trust center, no compliance page, no certification badges on the site, and
+    probe-security-programs.py returned trust=none. Notable for a vendor whose product brokers a
+    customer's entire brand asset library between third-party systems, and whose AI pitch is
+    explicitly about governance.
+summary:
+  standards_evaluated: 19
+  conformant: 9
+  partial: 2
+  non_conformant: 7
+  unknown: 1
+  certifications_published: 0
+x-evidence:
+  fetched: '2026-08-12'
+  checks:
+  - url: https://mcp.ci-hub.com/.well-known/oauth-protected-resource
+    http_status: 200
+  - url: https://mcp-auth.ci-hub.com/.well-known/oauth-authorization-server
+    http_status: 200
+  - url: https://mcp-auth.ci-hub.com/.well-known/openid-configuration
+    http_status: 200
+  - url: https://live.ci-hub.com/api/v1/system/providerInfo
+    http_status: 401
+  - url: https://ci-hub.com/.well-known/security.txt
+    http_status: 404

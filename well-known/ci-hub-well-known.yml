@@ -1,0 +1,162 @@
+generated: '2026-08-12'
+method: searched
+source: live GET probes of /.well-known/* on every CI HUB host in apis.yml and openapi/servers[]
+note: >-
+  Six hosts probed across eight well-known paths. The corporate site, the developer docs host and
+  both API hosts serve nothing at /.well-known/ — no security.txt, no api-catalog, no agent card.
+  The discovery surface CI HUB does publish belongs entirely to the MCP server: mcp.ci-hub.com
+  answers RFC 9728 protected-resource metadata and RFC 8414 authorization-server metadata
+  anonymously, and its authorization server mcp-auth.ci-hub.com answers both RFC 8414 and OIDC
+  discovery. Those four documents are real and saved verbatim below; everything else is a
+  recorded absence.
+hosts:
+- host: https://mcp.ci-hub.com
+  role: MCP server (Bright AI Connector)
+  documents:
+  - path: /.well-known/oauth-protected-resource
+    spec: RFC 9728
+    status: 200
+    content_type: application/json
+    file: ci-hub-mcp-oauth-protected-resource.json
+  - path: /.well-known/oauth-authorization-server
+    spec: RFC 8414
+    status: 200
+    content_type: application/json
+    file: ci-hub-mcp-oauth-authorization-server.json
+  - path: /.well-known/openid-configuration
+    status: 401
+    note: the server answers 401 with {"error":"unauthorized"} for every unrecognized well-known path
+  - path: /.well-known/security.txt
+    status: 401
+  - path: /.well-known/agent-card.json
+    status: 401
+  - path: /.well-known/agent.json
+    status: 401
+  - path: /.well-known/api-catalog
+    status: 401
+  - path: /.well-known/ai-plugin.json
+    status: 401
+- host: https://mcp-auth.ci-hub.com
+  role: OAuth 2.1 authorization server for the MCP resource
+  documents:
+  - path: /.well-known/openid-configuration
+    spec: OpenID Connect Discovery 1.0
+    status: 200
+    content_type: application/json
+    file: ci-hub-mcp-auth-openid-configuration.json
+  - path: /.well-known/oauth-authorization-server
+    spec: RFC 8414
+    status: 200
+    content_type: application/json
+    note: byte-identical to the openid-configuration document
+  - path: /.well-known/security.txt
+    status: 404
+  - path: /.well-known/agent-card.json
+    status: 404
+  - path: /.well-known/agent.json
+    status: 404
+  - path: /.well-known/oauth-protected-resource
+    status: 404
+  - path: /.well-known/api-catalog
+    status: 404
+  - path: /.well-known/ai-plugin.json
+    status: 404
+- host: https://ci-hub.com
+  role: corporate website (HubSpot CMS)
+  documents:
+  - path: /.well-known/security.txt
+    status: 404
+  - path: /.well-known/openid-configuration
+    status: 404
+  - path: /.well-known/oauth-authorization-server
+    status: 404
+  - path: /.well-known/oauth-protected-resource
+    status: 404
+  - path: /.well-known/api-catalog
+    status: 404
+  - path: /.well-known/ai-plugin.json
+    status: 404
+  - path: /.well-known/agent-card.json
+    status: 404
+  - path: /.well-known/agent.json
+    status: 404
+- host: https://developer.ci-hub.com
+  role: SDK documentation host (Next.js / Fumadocs on Azure Container Apps)
+  documents:
+  - path: /.well-known/security.txt
+    status: 404
+  - path: /.well-known/openid-configuration
+    status: 404
+  - path: /.well-known/oauth-authorization-server
+    status: 404
+  - path: /.well-known/oauth-protected-resource
+    status: 404
+  - path: /.well-known/api-catalog
+    status: 404
+  - path: /.well-known/ai-plugin.json
+    status: 404
+  - path: /.well-known/agent-card.json
+    status: 404
+  - path: /.well-known/agent.json
+    status: 404
+- host: https://live.ci-hub.com
+  role: Access SDK production API host
+  documents:
+  - path: /.well-known/security.txt
+    status: 404
+  - path: /.well-known/openid-configuration
+    status: 404
+  - path: /.well-known/oauth-authorization-server
+    status: 404
+  - path: /.well-known/oauth-protected-resource
+    status: 404
+  - path: /.well-known/api-catalog
+    status: 404
+  - path: /.well-known/ai-plugin.json
+    status: 404
+  - path: /.well-known/agent-card.json
+    status: 404
+  - path: /.well-known/agent.json
+    status: 404
+- host: https://stage.ci-hub.com
+  role: Access SDK staging API host
+  documents:
+  - path: /.well-known/security.txt
+    status: 404
+  - path: /.well-known/openid-configuration
+    status: 404
+  - path: /.well-known/oauth-authorization-server
+    status: 404
+  - path: /.well-known/oauth-protected-resource
+    status: 404
+  - path: /.well-known/api-catalog
+    status: 404
+  - path: /.well-known/ai-plugin.json
+    status: 404
+  - path: /.well-known/agent-card.json
+    status: 404
+  - path: /.well-known/agent.json
+    status: 404
+summary:
+  hosts_probed: 6
+  paths_probed_per_host: 8
+  documents_found: 4
+  security_txt: false
+  api_catalog: false
+  agent_card: false
+  oauth_discovery: true
+x-evidence:
+  fetched: '2026-08-12'
+  checks:
+  - url: https://mcp.ci-hub.com/.well-known/oauth-protected-resource
+    http_status: 200
+  - url: https://mcp.ci-hub.com/.well-known/oauth-authorization-server
+    http_status: 200
+  - url: https://mcp-auth.ci-hub.com/.well-known/openid-configuration
+    http_status: 200
+  - url: https://ci-hub.com/.well-known/security.txt
+    http_status: 404
+  - url: https://developer.ci-hub.com/.well-known/agent-card.json
+    http_status: 404
+  - url: https://live.ci-hub.com/.well-known/api-catalog
+    http_status: 404

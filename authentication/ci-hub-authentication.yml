@@ -1,0 +1,181 @@
+generated: '2026-08-12'
+method: searched
+source: https://developer.ci-hub.com/access/authentication
+derived_from: openapi/ci-hub-access-openapi.yml
+note: >-
+  CI HUB runs two entirely different authentication models side by side, and a partner touching
+  both surfaces has to implement both. The Access SDK uses a proprietary partner-JWT token
+  exchange with a second, per-DAM token layered on top — no OAuth, no scopes, no authorization
+  endpoint. The MCP server uses standards-compliant OAuth 2.1 with discovery metadata and dynamic
+  client registration. Neither is wrong; they just are not the same system, and nothing in the
+  docs connects them.
+summary:
+  types:
+  - http
+  - apiKey
+  - oauth2
+  api_key_in:
+  - header
+  models: 2
+  scopes: 1
+  mfa_or_user_consent_step: true
+models:
+- id: access-sdk
+  applies_to: ci-hub:access-sdk
+  style: two-token — partner JWT exchange, plus a per-DAM connection token
+  standard: none (JWT/JWKS building blocks, but not OAuth 2.0 or RFC 7523)
+  docs: https://developer.ci-hub.com/access/authentication
+  bootstrap:
+    step: POST /auth/exchangeToken
+    operation: exchangeToken
+    presented_credential: partner-signed JWT in Authorization Bearer
+    algorithm: RS256 (HS256 explicitly rejected)
+    root_of_trust: >-
+      the partner's published JWKS URL, registered with CI HUB at onboarding and cached by CI HUB
+      for 10 minutes; the JWT `kid` must match a key in that set
+    required_claims:
+    - iss — the registered partner issuer, matched exactly including any trailing slash
+    - aud — the registered audience, default https://api.ci-hub.com
+    - sub — stable identifier for the user in the partner system
+    - iat — unix seconds; up to 30s future tolerance; rejected once older than maxTokenAge
+    - exp — unix seconds, must be in the future
+    - email — required in the JWT or the JSON request body; drives JIT user resolution
+    optional_claims:
+    - given_name
+    - family_name
+    - name
+    max_token_age: 3600 seconds by default, measured from iat
+    single_use: the partner JWT is consumed once per exchange and discarded
+    trap: >-
+      `aud` is always https://api.ci-hub.com on EVERY environment. It identifies CI HUB in the
+      partner registration and does not change with the client's baseUrl. Setting it to the host
+      you are calling returns 403 cihub-sdk-audience-invalid.
+  schemes:
+  - name: cihubAccessToken
+    type: http
+    scheme: bearer
+    bearerFormat: JWT
+    header: Authorization
+    algorithm: HS256
+    lifetime: 1 hour
+    required_on: every call after the exchange
+    description: >-
+      CI HUB access token returned by POST /auth/exchangeToken. Identifies the user inside CI HUB.
+      On POST /auth/exchangeToken itself this header instead carries the partner-signed RS256 JWT.
+    sources:
+    - openapi/ci-hub-access-openapi.yml
+  - name: damToken
+    type: apiKey
+    in: header
+    parameter: provider-authorization
+    format: Bearer <DAM connection token>
+    lifetime: provider-dependent; not reported at login
+    required_on: >-
+      calls that reach a specific DAM — folder browse, search, asset detail, versions, download,
+      thumbnail
+    description: >-
+      DAM connection token obtained from the provider login flow. Authorizes access to the DAM
+      itself, which authenticates separately from CI HUB. The partner platform obtains and stores
+      these; CI HUB does not persist them server-side.
+    overload_warning: >-
+      On GET /auth/refreshToken this same header carries the CI HUB REFRESH token rather than a DAM
+      token, and the refresh token's sub must match the access token's sub. It is the one place the
+      two-token rule does not hold.
+    sources:
+    - openapi/ci-hub-access-openapi.yml
+  token_lifetimes:
+  - token: partner JWT
+    lifetime: up to maxTokenAge (1 hour default)
+    algorithm: RS256
+    storage: minted per exchange, discarded
+  - token: CI HUB access token
+    lifetime: 1 hour
+    algorithm: HS256
+    storage: cached by the partner, sent on every call
+  - token: CI HUB refresh token
+    lifetime: 30 days
+    algorithm: HS256
+    storage: cached by the partner, used to mint new access tokens
+  - token: DAM connection token
+    lifetime: provider-dependent, not reported
+    storage: held by the partner platform; not persisted by CI HUB
+  refresh:
+    operation: refreshTokenSdk
+    endpoint: GET /auth/refreshToken
+    behavior: >-
+      Mints a new access token AND a new refresh token. The previous access token is superseded but
+      remains valid until its exp; the previous refresh token remains valid for its full 30 days,
+      so a slow client switch-over is safe. Refresh the CI HUB session proactively from expires_in;
+      refresh a DAM session reactively on the first 401, since providers report no lifetime.
+  dam_login:
+    operations:
+    - damLoginInitiate
+    - damLoginPoll
+    style: browser redirect at the DAM plus server-side polling on a one-time `state`
+    note: >-
+      Most DAMs use OAuth on their own side, so the redirect is part of the DAM's flow, not CI
+      HUB's. The CI HUB token exchange itself has no browser redirect at all.
+    provider_params:
+      serverUrl: >-
+        the DAM instance origin, read by bynder, dash, fotoware, frontify, picturepark and purered;
+        supplying it removes the instance-prompt page from the user's flow
+  session_end:
+    operation: logoutSdk
+    endpoint: GET /auth/logout
+  validation:
+    operation: checkTokenSdk
+    endpoint: GET /auth/checkToken
+    returns: >-
+      the user profile envelope plus licenseState, licenseExpires and isTrialLicense describing the
+      SDK subscription. A 401 means start a new exchange; a 402 means the subscription state
+      changed and is an operational, not technical, problem.
+- id: mcp
+  applies_to: ci-hub:mcp
+  style: OAuth 2.1 authorization code with PKCE
+  standard: OAuth 2.1, RFC 8414, RFC 9728, RFC 7591, RFC 7636
+  resource: https://mcp.ci-hub.com
+  authorization_server: https://mcp-auth.ci-hub.com
+  discovery:
+  - https://mcp.ci-hub.com/.well-known/oauth-protected-resource
+  - https://mcp-auth.ci-hub.com/.well-known/oauth-authorization-server
+  - https://mcp-auth.ci-hub.com/.well-known/openid-configuration
+  challenge: >-
+    WWW-Authenticate: Bearer error="unauthorized", error_description="Authorization needed",
+    resource_metadata="https://mcp.ci-hub.com/.well-known/oauth-protected-resource"
+  grant_types:
+  - authorization_code
+  - refresh_token
+  pkce: S256 only
+  dynamic_client_registration: true
+  token_endpoint_auth_methods:
+  - client_secret_basic
+  - client_secret_post
+  - none
+  scopes:
+  - cihub
+  second_factor: >-
+    The OAuth grant is only half the authorization. Each end user separately authenticates the DAM
+    accounts they want reachable, and CI HUB maps that user's existing DAM permissions onto every
+    tool call. Users change what is reachable by disconnecting and reconnecting.
+  see: scopes/ci-hub-scopes.yml
+authorization_model:
+  cihub_layer: identity only — the CI HUB token says who the user is, not what they may touch
+  dam_layer: >-
+    every permission decision is the DAM's. integration-forbidden (403) forwards a DAM permission
+    denial verbatim, and the docs are explicit that "permission decisions are governed by the DAM".
+  consequence: >-
+    There is no CI HUB-side permission surface to inspect, grant or revoke. An auditor asking what
+    a CI HUB token can reach has to ask each connected DAM instead.
+x-evidence:
+  fetched: '2026-08-12'
+  checks:
+  - url: https://developer.ci-hub.com/access/authentication
+    http_status: 200
+  - url: https://live.ci-hub.com/api/v1/system/providerInfo
+    http_status: 401
+    note: 'anonymous call returns errorCode cihub-access-token-missing, confirming the Authorization
+      requirement'
+  - url: https://mcp.ci-hub.com/.well-known/oauth-protected-resource
+    http_status: 200
+  - url: https://mcp-auth.ci-hub.com/.well-known/oauth-authorization-server
+    http_status: 200

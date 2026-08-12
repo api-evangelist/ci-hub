@@ -1,0 +1,96 @@
+generated: '2026-08-12'
+method: searched
+source: https://developer.ci-hub.com/access
+note: >-
+  CI HUB has two genuinely different test surfaces and neither is a sandbox in the Stripe sense.
+  There are no test credentials, no magic identifiers, no fixture generator and no time
+  simulation — and there structurally cannot be, because the assets are not CI HUB's. Every asset
+  a call touches lives in a customer's own Bynder, AEM, Dropbox or SharePoint tenant, so a test
+  fixture would have to be manufactured inside a third party's system. What exists instead is a
+  staging ENVIRONMENT for the Access SDK and a local dev server for the Integration SDK. Recorded
+  as found; nothing here is invented.
+environments:
+- name: stage
+  base_url: https://stage.ci-hub.com/api/v1
+  role: >-
+    Staging environment. Every code sample, cURL snippet and worked example in the published
+    Access SDK reference points at this host rather than production, which makes it the de facto
+    integration environment for a partner building against the API.
+  live_data: true
+  live_data_note: >-
+    Not a mock. It still brokers to real DAM systems, so a partner testing here connects a real
+    DAM account and reads real assets. There is no synthetic asset corpus.
+  credentials_published: false
+  probed:
+    url: https://stage.ci-hub.com/api/v1/auth/providers
+    http_status: 200
+    note: answers anonymously with the degraded single-entry provider list, identical to live
+- name: live
+  base_url: https://live.ci-hub.com/api/v1
+  role: Production
+  live_data: true
+key_prefixes:
+  test_vs_live_distinction: false
+  note: >-
+    No test-mode / live-mode key convention. Credentials are not keys at all: a partner registers
+    an issuer and a JWKS URL with CI HUB during onboarding, then signs its own RS256 JWTs. The
+    same mechanism is used on both hosts, and the `aud` claim is documented as always
+    https://api.ci-hub.com "on every environment" — it identifies CI HUB in the partner
+    registration and does NOT change with the client's baseUrl. That is a real trip hazard: the
+    audience does not follow the host.
+onboarding_gate:
+  required: true
+  what: >-
+    Two things are set up with CI HUB during onboarding before any call succeeds — partner
+    registration (issuer plus JWKS URL) and an SDK subscription. Commercial terms are agreed at
+    the same time.
+  effect: >-
+    There is no self-serve path to a working token. An unregistered issuer gets 403
+    cihub-sdk-partner-unknown; a partner with no subscription gets 402 cihub-sdk-no-subscription.
+    Both are documented, which is more than most gated APIs do.
+  source: https://developer.ci-hub.com/access/authentication/ci-hub/partner-registration
+public_demo_jwks:
+  repo: https://github.com/CI-HUB-GmbH/access-sdk-val-jwks
+  description: Public JWKS for the Access SDK VAL-1 demo partner
+  note: >-
+    CI HUB maintains a public repository holding the JWKS for a demo partner ("VAL-1"), which is
+    the closest thing to a published test identity. The corresponding PRIVATE key is not
+    published, so it does not grant access — but its existence confirms the partner-registration
+    flow is exercised against a fixed demo issuer.
+  last_pushed: '2026-05-28'
+integration_sdk_local_testing:
+  mechanism: local development server with a test UI
+  command: integration-cli dev
+  url: http://localhost:8080
+  watches:
+  - .ts
+  - .js
+  - .json
+  - .ect
+  dry_run: integration-cli submit --dry lists every file and warning without submitting
+  note: >-
+    The Integration SDK's testing story is genuinely good — a local harness that exercises the
+    handler contract before submission, plus a dry-run bundler. See cli/ci-hub-cli.yml.
+  source: https://developer.ci-hub.com/integration/reference/cli
+mcp_trial:
+  url: https://ci-hub.com/start-free-trial
+  note: >-
+    A free trial exists for the Connector/AI products, which is a commercial trial of the end-user
+    product rather than a developer sandbox for the API.
+summary:
+  sandbox_published: false
+  staging_environment: true
+  test_credentials_published: false
+  test_fixtures_published: false
+  time_simulation: false
+  local_harness: true
+  self_serve: false
+x-evidence:
+  fetched: '2026-08-12'
+  checks:
+  - url: https://stage.ci-hub.com/api/v1/auth/providers
+    http_status: 200
+  - url: https://developer.ci-hub.com/access/getting-started
+    http_status: 200
+  - url: https://developer.ci-hub.com/access/client-library
+    http_status: 200

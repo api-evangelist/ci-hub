@@ -1,0 +1,105 @@
+generated: '2026-08-12'
+method: probed
+source: https://developer.ci-hub.com/access/authentication/ci-hub/exchange-token#rate-limit
+observed_on: https://live.ci-hub.com/api/v1/system/providerInfo
+note: >-
+  Two things worth separating. CI HUB DOCUMENTS a rate limit on one endpoint only — token
+  exchange, 60 requests per minute per partner, keyed by the JWT iss — and states explicitly that
+  the other Access SDK endpoints "are not rate-limited at this layer". But the edge tells a
+  different story: every response observed from live.ci-hub.com, including an unauthenticated
+  401, carries a 7500-request-per-300-second budget in both the draft RateLimit-* and legacy
+  X-RateLimit-* header families. So there IS a platform-wide limiter in front of the whole API;
+  it is simply not written down. Both facts are recorded below because a consumer needs both: the
+  documented number to plan against, and the observed headers to actually read at runtime.
+rate_limits:
+- scope: per-partner
+  applies_to: POST /auth/exchangeToken
+  key: the JWT `iss` claim (the registered partner issuer)
+  limit: 60
+  window: 1 minute
+  burst: null
+  configurable: true
+  configurable_note: CI HUB can raise the limit for a partner on request.
+  status_on_exhaustion: 429
+  error_code: cihub-rate-limited
+  method: searched
+  source: https://developer.ci-hub.com/access/authentication/ci-hub/exchange-token#rate-limit
+  guidance: >-
+    Exchange once per session and cache the returned tokens rather than exchanging per request.
+    On a 429, wait for Retry-After before retrying.
+- scope: platform
+  applies_to: every /api/v1 route on live.ci-hub.com and stage.ci-hub.com
+  limit: 7500
+  window: 300 seconds
+  policy_header: 7500;w=300
+  status_on_exhaustion: 429
+  method: probed
+  source: https://live.ci-hub.com/api/v1/system/providerInfo
+  documented: false
+  note: >-
+    Undocumented. Observed directly on an anonymous request: the 401 response carried
+    ratelimit-policy 7500;w=300 with matching limit/remaining/reset in both header families.
+    Because it is observed rather than published, treat the number as subject to change without
+    notice and read the headers rather than hard-coding it.
+headers:
+  standard_family:
+  - name: RateLimit-Limit
+    documented: true
+    observed: true
+    observed_value: '7500'
+  - name: RateLimit-Remaining
+    documented: true
+    observed: true
+    observed_value: '7472'
+  - name: RateLimit-Reset
+    documented: true
+    observed: true
+    observed_value: '281'
+    unit: seconds remaining in the window
+  - name: RateLimit-Policy
+    documented: false
+    observed: true
+    observed_value: 7500;w=300
+  legacy_family:
+  - name: X-RateLimit-Limit
+    documented: false
+    observed: true
+    observed_value: '7500'
+  - name: X-RateLimit-Remaining
+    documented: false
+    observed: true
+    observed_value: '7472'
+  - name: X-RateLimit-Reset
+    documented: false
+    observed: true
+    observed_value: '1786548134'
+    unit: unix epoch seconds
+    note: >-
+      the legacy header reports an absolute epoch while the standard header reports a relative
+      delta — read one family or the other, not a mix
+  on_429:
+  - name: Retry-After
+    documented: true
+    observed: false
+    note: documented as added on 429; not observed because no 429 was provoked
+mcp_server:
+  url: https://mcp.ci-hub.com
+  limits_published: false
+  note: >-
+    No rate limits are published for the MCP server. It does publish a concurrency ceiling
+    instead: up to 10 actions per batch request with a maximum of 5 executing concurrently and
+    the rest queued. See mcp/ci-hub-mcp.yml.
+summary:
+  limit_count: 2
+  documented_count: 1
+  observed_count: 1
+  headers_returned: true
+  retry_after_on_429: true
+x-evidence:
+  fetched: '2026-08-12'
+  checks:
+  - url: https://live.ci-hub.com/api/v1/system/providerInfo
+    http_status: 401
+    note: response headers carried x-ratelimit-limit 7500, ratelimit-policy 7500;w=300
+  - url: https://developer.ci-hub.com/access/llms-full.txt
+    http_status: 200

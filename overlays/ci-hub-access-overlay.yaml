@@ -1,0 +1,144 @@
+overlay: 1.0.0
+info:
+  title: API Evangelist enhancements for the CI HUB Access SDK API
+  version: 1.0.0
+extends: ../openapi/ci-hub-access-openapi.yml
+x-provenance:
+  generated: '2026-08-12'
+  method: generated
+  source: openapi/ci-hub-access-openapi.yml
+  note: >-
+    Everything here is OUR addition, kept out of the OpenAPI document so that file stays a faithful
+    reverse of the openapi-typescript projection CI HUB publishes. Two kinds of change: operation
+    tags, which the projection carries none of and which we group by the docs' own section
+    structure (Authentication / DAM Connection / Content / System); and x-rate-limit / x-errors
+    annotations pointing at the runtime facts recorded elsewhere in this repo. Apply this overlay
+    to get a navigable spec; read the base file to see exactly what CI HUB published.
+actions:
+- target: $
+  update:
+    tags:
+    - name: Authentication
+      description: >-
+        Partner-JWT token exchange and CI HUB session lifecycle. The partner backend signs an
+        RS256 JWT and exchanges it for a CI HUB access token and refresh token; the remaining
+        operations here check, renew and end that session.
+      externalDocs:
+        url: https://developer.ci-hub.com/access/authentication
+    - name: DAM Connection
+      description: >-
+        Connecting an end user to a specific DAM provider. List the providers available to the
+        user, initiate a provider login, poll it to completion, and read the connected provider's
+        runtime capabilities.
+      externalDocs:
+        url: https://developer.ci-hub.com/access/authentication/dam
+    - name: Content
+      description: >-
+        Read-only access to a connected DAM — folder browse, keyword search, similarity search
+        from a reference image, asset detail and asset version history. Every operation here
+        requires both the CI HUB access token and the DAM connection token.
+      externalDocs:
+        url: https://developer.ci-hub.com/access/content
+    - name: System
+      description: Runtime detail about the connected DAM provider.
+- target: $.paths['/auth/exchangeToken'].post
+  update:
+    tags:
+    - Authentication
+    x-rate-limit:
+      documented: 60 requests per minute per partner, keyed by the JWT iss claim
+      configurable: true
+      see: ../rate-limits/ci-hub-rate-limits.yml
+    x-idempotency:
+      supported: false
+      note: >-
+        No idempotency mechanism is documented. Exchange once per session and cache the tokens
+        rather than exchanging per request.
+- target: $.paths['/auth/checkToken'].get
+  update:
+    tags:
+    - Authentication
+- target: $.paths['/auth/refreshToken'].get
+  update:
+    tags:
+    - Authentication
+    x-note: >-
+      The one operation where provider-authorization does NOT carry a DAM token. Here it carries
+      the CI HUB refresh token, and the refresh token's sub must match the access token's sub.
+- target: $.paths['/auth/logout'].get
+  update:
+    tags:
+    - Authentication
+- target: $.paths['/auth/providers'].get
+  update:
+    tags:
+    - DAM Connection
+    x-anonymous-behavior: >-
+      Answers without a token, but returns only a single degraded entry (the `cihub` pseudo-
+      provider) rather than the real provider list. Verified live: HTTP 200, one entry.
+- target: $.paths['/auth/login'].post
+  update:
+    tags:
+    - DAM Connection
+- target: $.paths['/auth/login'].get
+  update:
+    tags:
+    - DAM Connection
+    x-polling: >-
+      Poll with the `state` returned by initiate. An empty object means the login is still in
+      progress; tokens mean it completed; an `error` property means the state is dead (unknown,
+      expired, consumed, or the login failed).
+- target: $.paths['/system/providerInfo'].get
+  update:
+    tags:
+    - System
+    x-capability-negotiation: >-
+      Read this before exposing an affordance. The provider capability matrix decides whether
+      similarity search, tasking, brand hub, folder-scoped search and direct upload are available
+      for the DAM behind this session.
+- target: $.paths['/assets/search'].get
+  update:
+    tags:
+    - Content
+    x-pagination:
+      style: opaque cursor
+      cursor: more
+      page_size: size
+      note: size is clamped to the provider maximum rather than rejected
+- target: $.paths['/assets/search'].post
+  update:
+    tags:
+    - Content
+    x-capability-required: >-
+      Similarity search is only available where the connected provider declares
+      capabilities.assetSearch.similarSearch. Otherwise expect 501 integration-not-supported.
+- target: $.paths['/assets/folder/{folderId}'].get
+  update:
+    tags:
+    - Content
+    x-pagination:
+      note: >-
+        `more` pages the assets array only. Subfolders are not paged by it and may appear on the
+        first page alone or be repeated on every page, depending on the provider.
+    x-root: the literal folderId `root` addresses the top of the connected DAM's tree
+- target: $.paths['/assets/asset/{assetId}'].get
+  update:
+    tags:
+    - Content
+- target: $.paths['/assets/assetversions/{assetId}'].get
+  update:
+    tags:
+    - Content
+- target: $.components.schemas.ErrorEnvelope
+  update:
+    x-error-catalog: ../errors/ci-hub-problem-types.yml
+    x-error-catalog-note: >-
+      28 documented codes across 9 statuses. Switch on error.code; route the ticket by error.source
+      (cihub means CI HUB owns the failure, integration means the DAM does).
+- target: $.components.schemas.Asset
+  update:
+    x-data-model: ../data-model/ci-hub-data-model.yml
+    x-hash-note: >-
+      Exactly one of the downloadHash* fields is populated per asset, selected by the connected
+      provider's capabilities.assetHashAlgorithm. Read the capability before reading the hash.
+    x-timestamp-note: created and modified are Unix epoch MILLISECONDS, not ISO 8601 strings.

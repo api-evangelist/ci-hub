@@ -1,0 +1,174 @@
+generated: '2026-08-12'
+method: derived
+source: openapi/ci-hub-access-openapi.yml
+also_searched: https://developer.ci-hub.com/access/concepts
+note: >-
+  The entity graph is deliberately shallow, and that is the design. CI HUB normalizes 60-plus
+  heterogeneous DAM, PIM, CMS and storage systems onto one shape, so the model is essentially
+  Folder contains Asset, with everything variable pushed into two escape hatches: a `values` array
+  of CustomMetadataField for whatever the source system calls its metadata, and a capabilities
+  object on every entity saying what the DAM behind this particular response actually permits.
+  Asset carries 45 properties against Folder's 3 — the asymmetry is real, because a folder is only
+  ever a container in this contract while an asset carries the full normalized metadata,
+  dimensions, hashes, renditions and permission flags.
+entities:
+- name: Asset
+  description: A single file in a connected DAM, normalized to CI HUB's shape.
+  primary_key: id
+  property_count: 45
+  required_properties:
+  - id
+  - name
+  - fileSize
+  - xSizePx
+  - ySizePx
+  - created
+  - modified
+  - mimeType
+  - version
+  key_properties:
+  - id
+  - name
+  - parentPath
+  - fileSize
+  - mimeType
+  - version
+  - versionComment
+  - created
+  - modified
+  - relatedFolderId
+  - masterId
+  timestamps: Unix epoch MILLISECONDS on created and modified, not ISO 8601 strings
+  hash_fields:
+  - downloadHashMd5
+  - downloadHashSha1
+  hash_note: >-
+    Only ONE hash field is populated per asset, chosen by the connected provider's
+    capabilities.assetHashAlgorithm (Md5, Sha1, Sha256, Sha256Split4MB, Sha256First16MB, Sha512,
+    FileAttributes or Crc32). A client cannot assume any particular hash is present; it must read
+    the provider capability first.
+  returned_by:
+  - searchAssetsSdk
+  - searchSimilarAssetsSdk
+  - getFolderSdk
+  - getAssetSdk
+  - getAssetVersionsSdk
+- name: Folder
+  description: A container node in a connected DAM.
+  primary_key: id
+  property_count: 3
+  key_properties:
+  - id
+  - relatedAssetId
+  returned_by:
+  - getFolderSdk
+- name: AssetCapabilities
+  description: >-
+    Per-asset permission flags — canDeleteAsset, canUpdateAsset, canLockAsset, canUnlockAsset,
+    canRenameAsset — plus uploadExtensions naming the extensions an update may use when the DAM
+    permits changing type.
+  property_count: 6
+  embedded_in:
+  - Asset
+- name: FolderCapabilities
+  description: Per-folder permission flags, the folder analogue of AssetCapabilities.
+  property_count: 4
+- name: CustomMetadataField
+  description: >-
+    One provider-defined metadata field. Carries id, name, value, a type hint (TEXT, DRAFT_JS,
+    DATE, DATETIME, TIME) used for formatting, and i18nName giving the field label per locale.
+  primary_key: id
+  property_count: 5
+  embedded_in:
+  - Asset
+- name: ProviderCapabilities
+  description: >-
+    The capability matrix for a connected DAM — category, upload size ceiling, hash algorithm,
+    search behavior (similarity, folder scoping, parallelism, search-by-hash), tasking support,
+    brand hub support, per-locale descriptions and help text, and extra request headers to attach
+    when talking to the provider directly.
+  property_count: 18
+  returned_by:
+  - getProvidersSdk
+  - getProviderInfoSdk
+- name: AssetNavigationFilter
+  description: A facet the connected DAM exposes for narrowing a search or folder listing.
+  primary_key: id
+  property_count: 3
+- name: StructuredError
+  description: >-
+    Machine-readable error classification — code, source (cihub or integration), status, message,
+    optional details and provider.
+  property_count: 6
+- name: ErrorEnvelope
+  description: >-
+    The response wrapper. Carries the StructuredError under `error`, plus legacy top-level mirrors
+    (message, details, errorCode) kept for clients predating the structured shape.
+  property_count: 4
+relationships:
+- from: Folder
+  to: Asset
+  type: has_many
+  via: the `assets` array on the folder-browse response
+  note: paged by the `more` cursor
+- from: Folder
+  to: Folder
+  type: has_many
+  via: the `folders` array on the folder-browse response
+  note: >-
+    NOT paged by `more`. Depending on the provider, subfolders arrive on the first page only or
+    are repeated on every page.
+- from: Asset
+  to: Folder
+  type: belongs_to
+  via: parentPath
+  note: a path string rather than a foreign key; there is no parentId on Asset
+- from: Asset
+  to: Folder
+  type: has_one
+  via: relatedFolderId
+  note: >-
+    The complex-object case. Some source systems model a thing that is simultaneously an asset and
+    a folder; relatedFolderId is the id to use when displaying that same object as a folder.
+- from: Folder
+  to: Asset
+  type: has_one
+  via: relatedAssetId
+  note: the inverse of relatedFolderId — the same complex object viewed as an asset
+- from: Asset
+  to: Asset
+  type: belongs_to
+  via: masterId
+  note: >-
+    Version lineage. Present only when this asset IS a version; it names the master asset the
+    version belongs to. Versions are read through GET /assets/assetversions/{assetId}.
+- from: Asset
+  to: CustomMetadataField
+  type: has_many
+  via: values
+- from: Asset
+  to: AssetCapabilities
+  type: has_one
+  via: capabilities
+- from: ErrorEnvelope
+  to: StructuredError
+  type: has_one
+  via: error
+id_conventions:
+  format: opaque provider-scoped strings
+  note: >-
+    No id prefixes, no globally unique format. Ids are whatever the source DAM uses and are only
+    meaningful within one connected provider — the same string may address different things in
+    two DAMs. The documented examples (asset_12345, folder_123, asset-456) are illustrative, not a
+    scheme.
+  root_folder: the literal id `root` addresses the top of a connected DAM's tree
+summary:
+  entity_count: 9
+  relationship_count: 9
+  root_entities:
+  - Folder
+  - Asset
+  polymorphic_cases: 1
+  polymorphic_note: >-
+    the complex object that is both an asset and a folder, linked by relatedFolderId /
+    relatedAssetId

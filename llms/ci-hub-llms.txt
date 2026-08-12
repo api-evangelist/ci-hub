@@ -1,0 +1,10 @@
+# YourCompany Docs
+> SDKs for integration and access.
+
+## Integration SDK
+- [Index](/integration/llms.txt)
+- [Full text](/integration/llms-full.txt)
+
+## Access SDK
+- [Index](/access/llms.txt)
+- [Full text](/access/llms-full.txt)

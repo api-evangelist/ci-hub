@@ -1,0 +1,59 @@
+generated: '2026-08-12'
+method: generated
+source: openapi/ci-hub-access-openapi.yml + conventions/ci-hub-conventions.yml + errors/ci-hub-problem-types.yml
+note: >-
+  Two packaged Agent Skills covering the two marquee flows of the CI HUB Access SDK: getting a
+  session with a DAM connected, and then finding and fetching an asset through it. Every
+  operationId referenced is verified against the contract in openapi/ — none is invented. Both
+  skills lead with the things that actually break integrations here: `aud` not following the host,
+  the anonymous provider list answering 200 with a wrong answer, the overloaded
+  provider-authorization header, epoch-millisecond timestamps, the single populated hash field,
+  and capability negotiation before affordance.
+
+  No skill is written for the write surface, because the Access SDK has none — writes exist only
+  on the MCP server, whose input schemas are auth-gated and therefore cannot be grounded. CI HUB
+  publishes no skills or AGENTS.md of its own; searched and not found.
+skills:
+- name: ci-hub-connect-a-dam
+  file: ci-hub-connect-a-dam.md
+  api: ci-hub:access-sdk
+  summary: >-
+    Partner-JWT token exchange, provider listing, DAM login initiate and poll, and reading the
+    connected provider's capability matrix. The prerequisite for everything else.
+  operations:
+  - exchangeToken
+  - getProvidersSdk
+  - damLoginInitiate
+  - damLoginPoll
+  - getProviderInfoSdk
+- name: ci-hub-find-and-fetch-an-asset
+  file: ci-hub-find-and-fetch-an-asset.md
+  api: ci-hub:access-sdk
+  requires: ci-hub-connect-a-dam
+  summary: >-
+    Keyword search, similarity search from a reference image, folder-tree walk, asset detail and
+    version history, cursor paging, then the three-step URL resolution that turns a downloadUrl
+    into bytes.
+  operations:
+  - searchAssetsSdk
+  - searchSimilarAssetsSdk
+  - getFolderSdk
+  - getAssetSdk
+  - getAssetVersionsSdk
+coverage:
+  operations_in_spec: 13
+  operations_covered: 10
+  uncovered:
+  - checkTokenSdk
+  - refreshTokenSdk
+  - logoutSdk
+  uncovered_reason: >-
+    session-lifecycle maintenance rather than a user-facing flow; described inline in
+    ci-hub-connect-a-dam under "Keeping the session alive" rather than given their own skill
+provider_published_skills:
+  found: false
+  searched:
+  - https://developer.ci-hub.com/llms.txt
+  - https://developer.ci-hub.com/access/llms.txt
+  - https://developer.ci-hub.com/integration/llms.txt
+  - https://github.com/CI-HUB-GmbH

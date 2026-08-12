@@ -1,0 +1,84 @@
+generated: '2026-08-12'
+method: searched
+source: https://developer.ci-hub.com/access/changelog
+applies_to: ci-hub:access-sdk
+note: >-
+  A real dated changelog exists for the Access SDK, and it leads with the stability contract
+  rather than the entries — which is the right order, because the contract is what tells a reader
+  which entries they will and will not see. Additive changes ship WITHOUT appearing here at all;
+  the changelog is where breaking changes get announced before they ship. So this is not a
+  complete record of what changed, by design, and a consumer should not treat a quiet changelog as
+  a quiet API. The Connector product has a separate, unstructured release stream on the marketing
+  blog; it is not this changelog and is not versioned with the API.
+scheme: dated, newest first, grouped by month or release phase
+current_version: v1
+url: https://developer.ci-hub.com/access/changelog
+stability_contract:
+  additive_changes_announced: false
+  additive_examples:
+  - new response fields
+  - new optional parameters
+  - new endpoints
+  client_guidance: read response fields by name and ignore any field you do not recognize
+  breaking_changes_announced: true
+  breaking_change_notice: announced here before they ship; no minimum notice period stated
+entries:
+- version: July 2026
+  date: '2026-07'
+  breaking: false
+  additions:
+  - title: DAM login takes provider parameters
+    detail: >-
+      The initiate call accepts serverUrl, which answers up front the instance prompt CI HUB would
+      otherwise show the end user. Six providers read it — bynder, dash, fotoware, frontify,
+      picturepark, purered. Omitting it leaves the flow unchanged.
+    operation: damLoginInitiate
+  - title: Email in the request body is documented
+    detail: >-
+      Token exchange has always accepted email in the JSON body when the partner JWT carries no
+      email claim, which is how partners who anonymize the address integrate. Behavior unchanged;
+      it now has examples and the two constraints written down.
+    operation: exchangeToken
+    kind: documentation
+- version: Phase 1 (June 2026)
+  date: '2026-06'
+  breaking: false
+  highlights:
+  - First release of the Access SDK — read-only access to a connected DAM.
+  - 'Authentication: token exchange. A partner backend signs a JWT and exchanges it for a CI HUB
+    access token and refresh token (POST /auth/exchangeToken). Server to server, no browser
+    redirect.'
+  - 'DAM connection: list available providers, initiate and poll a provider login, read provider
+    capabilities.'
+  - 'Content: browse folders, keyword and similarity search, read asset detail and version history.
+    Read-only.'
+  - 'Errors: one standard error envelope across every endpoint, with a source field separating CI
+    HUB errors from provider errors.'
+related_streams:
+- name: '@ci-hub/access-sdk npm releases'
+  url: https://www.npmjs.com/package/@ci-hub/access-sdk?activeTab=versions
+  latest: 0.2.0
+  latest_date: '2026-07-27'
+  release_count: 3
+- name: '@ci-hub/integration-sdk npm releases'
+  url: https://www.npmjs.com/package/@ci-hub/integration-sdk?activeTab=versions
+  latest: 0.2.1
+  latest_date: '2026-06-14'
+  release_count: 7
+- name: CI HUB Connector product releases
+  url: https://ci-hub.com/blog
+  note: >-
+    Announced as marketing blog posts (versions 1.1.100, 1.2.11, 1.2.36 and 1.2.64 among them),
+    not as a structured changelog, and on a different cadence from the API.
+summary:
+  entry_count: 2
+  window: 2026-06 to 2026-07
+  breaking_changes_in_window: 0
+  dated: true
+x-evidence:
+  fetched: '2026-08-12'
+  checks:
+  - url: https://developer.ci-hub.com/access/changelog
+    http_status: 200
+  - url: https://developer.ci-hub.com/access/llms.txt
+    http_status: 200

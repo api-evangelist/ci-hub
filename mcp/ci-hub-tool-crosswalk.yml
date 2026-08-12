@@ -1,0 +1,149 @@
+generated: '2026-08-12'
+method: derived
+source: mcp/ci-hub-mcp.yml + openapi/ci-hub-access-openapi.yml
+note: >-
+  CI HUB runs two agent-relevant surfaces over the same content core and they are NOT the same
+  API. The Access SDK HTTP API is read-only in its current release — browse, search, read detail,
+  read versions — while the MCP server exposes the full write surface: upload, delete, rename,
+  move, create folder, plus batch variants. Every MCP write tool is therefore mcp_only, not
+  because it is composite but because the equivalent REST operation has not shipped: the client
+  library declares upload() and update() with their final signatures and throws
+  NotImplementedError (cihub-not-implemented) until the write engine lands. That is the finding
+  this crosswalk exists to record. Bindings below are by name and documented semantics; the live
+  MCP inputSchema is auth-gated (tools/list returns 401), so no confidence above medium is
+  claimed for any row whose parameters could not be read.
+surfaces:
+- surface: openapi
+  file: openapi/ci-hub-access-openapi.yml
+  base: https://live.ci-hub.com/api/v1
+  gated: false
+  note: >-
+    documented publicly; GET /auth/providers answers anonymously, everything else needs the
+    two-token pair
+  operation_count: 13
+- surface: mcp
+  url: https://mcp.ci-hub.com
+  gated: true
+  note: OAuth 2.1 required; tool names published, input schemas not
+  tool_count: 21
+- surface: graphql
+  present: false
+crosswalk:
+- tool: Search-Asset
+  category: asset
+  rest:
+  - searchAssetsSdk
+  - searchSimilarAssetsSdk
+  binding: direct
+  confidence: high
+  note: >-
+    GET /assets/search is keyword search; POST /assets/search is similarity search from a
+    reference image. One tool name covers both REST operations.
+- tool: Browse-Folders
+  category: folder
+  rest:
+  - getFolderSdk
+  binding: direct
+  confidence: high
+  note: GET /assets/folder/{folderId}, listing subfolders and assets at a folder
+- tool: Asset-Versions
+  category: asset
+  rest:
+  - getAssetVersionsSdk
+  binding: direct
+  confidence: high
+  note: GET /assets/assetversions/{assetId}
+- tool: Get-Available-Providers
+  category: core
+  rest:
+  - getProvidersSdk
+  - getProviderInfoSdk
+  binding: direct
+  confidence: high
+  note: >-
+    GET /auth/providers lists the DAM providers available to the user; GET /system/providerInfo
+    returns runtime detail for the connected one. The tool name maps to the listing; provider
+    detail is likely folded into the same tool response.
+- tool: Get-Asset-Download-URL
+  category: asset
+  rest:
+  - getAssetSdk
+  binding: partial
+  confidence: medium
+  note: >-
+    The Access SDK does not expose a dedicated download-URL operation in the published contract.
+    Download URLs arrive as placeholder-bearing fields on the Asset object returned by
+    GET /assets/asset/{assetId} (and by search and folder browse), which the client resolves
+    against /api/v1/assets/download. The tool most likely wraps that resolution.
+- tool: Get-Brand-Config
+  category: core
+  rest: []
+  binding: none
+  confidence: medium
+  note: >-
+    Brand Hub is documented on the Integration SDK side (capability supportsBrandHub, plus
+    get-brand-config and get-brand-assets handler schemas) but has no Access SDK REST operation
+    in the published v1 contract.
+mcp_only:
+- tool: Convert-File-To-Text
+  reason: >-
+    An AI-serving transform with no counterpart anywhere in the Access SDK contract. Exists to
+    turn a binary asset into something a model can read.
+- tool: Upload-Asset-By-URL
+  reason: >-
+    Write surface. The Access SDK is read-only in this release; @ci-hub/access-sdk declares
+    upload() but throws cihub-not-implemented.
+- tool: Delete-Asset
+  reason: write surface not present in the read-only Access SDK v1 contract
+- tool: Rename-Asset
+  reason: write surface not present in the read-only Access SDK v1 contract
+- tool: Move-Asset
+  reason: write surface not present in the read-only Access SDK v1 contract
+- tool: Create-Folder
+  reason: write surface not present in the read-only Access SDK v1 contract
+- tool: Delete-Folder
+  reason: write surface not present in the read-only Access SDK v1 contract
+- tool: Rename-Folder
+  reason: write surface not present in the read-only Access SDK v1 contract
+- tool: Move-Folder
+  reason: write surface not present in the read-only Access SDK v1 contract
+- tool: Batch-Create-Folder
+  reason: batch composite; no REST batch endpoint exists
+- tool: Batch-Delete-Asset
+  reason: batch composite; no REST batch endpoint exists
+- tool: Batch-Delete-Folder
+  reason: batch composite; no REST batch endpoint exists
+- tool: Batch-Rename-Asset
+  reason: batch composite; no REST batch endpoint exists
+- tool: Batch-Rename-Folder
+  reason: batch composite; no REST batch endpoint exists
+- tool: Batch-Upload-Asset-By-URL
+  reason: batch composite; no REST batch endpoint exists
+rest_only:
+- operationId: exchangeToken
+  reason: >-
+    session bootstrap for a partner platform. The MCP server runs its own OAuth 2.1 handshake
+    against mcp-auth.ci-hub.com instead, so the partner-JWT exchange has no tool.
+- operationId: checkTokenSdk
+  reason: session management, handled inside the MCP server rather than exposed as a tool
+- operationId: refreshTokenSdk
+  reason: session management, handled inside the MCP server rather than exposed as a tool
+- operationId: logoutSdk
+  reason: session management, handled inside the MCP server rather than exposed as a tool
+- operationId: damLoginInitiate
+  reason: >-
+    DAM connection flow. Users connect and disconnect DAM accounts through CI HUB itself, not
+    through an agent tool — deliberately, since it is the permission-granting step.
+- operationId: damLoginPoll
+  reason: DAM connection flow; not agent-exposed
+coverage:
+  mcp_tools: 21
+  rest_operations: 13
+  bound: 6
+  mcp_only: 15
+  rest_only: 6
+  bound_high_confidence: 4
+  note: >-
+    Only 6 of 21 tools bind to a published REST operation, and 9 of the 15 unbound tools are
+    unbound for one reason: the write surface exists in MCP and does not exist in REST. An agent
+    developer choosing between the two surfaces cannot treat them as interchangeable.

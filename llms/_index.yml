@@ -1,0 +1,51 @@
+generated: '2026-08-12'
+method: searched
+source: https://developer.ci-hub.com/llms.txt
+note: >-
+  CI HUB publishes a real llms.txt surface and does it properly: a root index that fans out to a
+  per-SDK index and a per-SDK full-text dump, with a one-line description on most entries. The
+  Access SDK docs even tell an agent developer to point their agent at /access/llms.txt or
+  /access/llms-full.txt by name. All three index files are saved here verbatim.
+
+  One finding: the ROOT llms.txt is titled "# YourCompany Docs". That is the Fumadocs scaffold
+  placeholder, shipped to production. It does not break anything — the links below it are correct
+  and the section indexes are well written — but the first line of CI HUB's machine-readable entry
+  point does not say CI HUB. Any agent that reads only the root file learns the vendor's name is
+  "YourCompany".
+files:
+- file: ci-hub-llms.txt
+  url: https://developer.ci-hub.com/llms.txt
+  http_status: 200
+  bytes: 228
+  role: root index, fans out to both SDKs
+  finding: title is the unedited scaffold placeholder "# YourCompany Docs"
+- file: ci-hub-access-llms.txt
+  url: https://developer.ci-hub.com/access/llms.txt
+  http_status: 200
+  bytes: 3768
+  role: Access SDK page index — 30 pages, most with a one-line description
+- file: ci-hub-integration-llms.txt
+  url: https://developer.ci-hub.com/integration/llms.txt
+  http_status: 200
+  bytes: 4093
+  role: Integration SDK page index — 66 pages including the full handler schema set
+full_text:
+- url: https://developer.ci-hub.com/access/llms-full.txt
+  http_status: 200
+  bytes: 129885
+  committed: false
+  reason: '*-llms-full.txt is gitignored per the pipeline contract; read live'
+- url: https://developer.ci-hub.com/integration/llms-full.txt
+  http_status: 200
+  bytes: 466013
+  committed: false
+  reason: '*-llms-full.txt is gitignored per the pipeline contract; read live'
+- url: https://developer.ci-hub.com/llms-full.txt
+  http_status: 404
+  note: the root has no full-text variant; only the two section-level ones exist
+other_hosts:
+- url: https://ci-hub.com/llms.txt
+  http_status: 404
+  note: the marketing site publishes no llms.txt — only the developer docs host does
+x-evidence:
+  fetched: '2026-08-12'

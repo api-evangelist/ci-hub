@@ -1,0 +1,182 @@
+generated: '2026-08-12'
+method: searched
+source: https://developer.ci-hub.com/access
+derived_from: openapi/ci-hub-access-openapi.yml
+applies_to: ci-hub:access-sdk
+note: >-
+  Cross-cutting runtime semantics for the CI HUB Access SDK API. The unusual thing about this API
+  is that it is a broker: one contract in front of 60-plus third-party DAM, PIM, CMS and storage
+  systems. Several conventions below are therefore explicitly PROVIDER-DEPENDENT by design — the
+  pagination cursor is opaque because its form differs per DAM, `size` is clamped rather than
+  rejected because each DAM caps it differently, and capability flags exist precisely so a client
+  can find out what the DAM behind the call actually supports before offering the affordance.
+  That is a coherent design, not a gap, but it means a consumer cannot assume uniform behavior
+  from a uniform contract.
+authentication:
+  style: two-token
+  primary:
+    header: Authorization
+    format: Bearer <CI HUB access token>
+    token: HS256 JWT, 1 hour lifetime
+    obtained_by: POST /auth/exchangeToken with a partner-signed RS256 JWT
+  secondary:
+    header: provider-authorization
+    format: Bearer <DAM connection token>
+    required_on: calls that reach a specific DAM — folder browse, search, asset detail, versions,
+      download, thumbnail
+    note: >-
+      The same header is overloaded on GET /auth/refreshToken, where it carries the CI HUB refresh
+      token instead of a DAM token. This is the one place the two-token rule does not hold and it
+      is a genuine sharp edge.
+  refresh:
+    access_token: 1 hour, refreshed proactively from the server's expires_in
+    refresh_token: 30 days; a new one is issued on every refresh
+    old_token_behavior: >-
+      The previous access token is superseded but stays valid until its exp, and the previous
+      refresh token remains valid for its full 30 days, so a slow client switch-over is safe.
+    dam_token: >-
+      DAM connections report no lifetime at login, so they refresh reactively on the first 401.
+      A provider with no refresh path requires a fresh DAM login.
+  see: authentication/ci-hub-authentication.yml
+idempotency:
+  supported: false
+  documented: false
+  header: null
+  note: >-
+    No idempotency mechanism is documented anywhere in the Access SDK or Integration SDK
+    references — the word does not appear once across either llms-full.txt. Today that is low-cost
+    because the published Access SDK surface is read-only, so every operation is naturally safe to
+    retry. It becomes a real gap the moment the write engine ships: the client library already
+    declares upload() and update(), and the MCP server already exposes Upload-Asset-By-URL,
+    Delete-Asset, Move-Asset and six Batch-* tools with no replay protection described. An agent
+    retrying a timed-out batch upload against a DAM has no documented way to avoid duplicating it.
+    NOTE FOR THE RATING: no `Idempotency` pointer is emitted in apis.yml, because none exists.
+pagination:
+  style: opaque cursor
+  request_params:
+  - name: more
+    in: query
+    description: >-
+      Send back the `more` value from the previous response to fetch the next page. Treat it as
+      opaque — its form (string token or number) and meaning differ between providers, so pass it
+      back unchanged rather than computing offsets.
+  - name: size
+    in: query
+    description: >-
+      Assets per page. Optional, defaults per provider. Each provider also caps it, and a large
+      size is CLAMPED to the provider's maximum rather than rejected. Keep it stable across the
+      pages of one traversal.
+  response_fields:
+  - name: more
+    description: present when further assets exist; absent on the last page
+  end_detection: >-
+    The presence of `more` is the signal, not the page size. A short page can be followed by
+    another and a full page can be the last. Loop until the response has no `more`.
+  caveat: >-
+    `more` pages the `assets` array only. The `folders` array is not paged by it: depending on the
+    provider you get subfolders on the first page alone, or repeated on every page. Read
+    subfolders from the first page, or dedupe folders by id when accumulating.
+  applies_to:
+  - getFolderSdk
+  - searchAssetsSdk
+  - searchSimilarAssetsSdk
+media_urls:
+  style: pre-signed URLs returned on the asset, not requested by id
+  note: >-
+    You do not request a thumbnail or download by asset id. Each asset in a folder or search
+    result already carries thumbnailUrl and downloadUrl (and conversions carry their own).
+  resolution_steps:
+  - Strip the CI HUB signature — keep cihubSig only on /api/v1/assets/download URLs, remove it
+    elsewhere.
+  - Resolve any $...$ placeholder in the URL. At most one authentication placeholder appears per
+    URL.
+  - For /api/v1/assets/download and /api/v1/assets/thumbnail URLs, send both CI HUB headers and
+    keep the URL's own signature parameter (cihubSig or sig). A modified CI HUB URL fails its
+    signature check with HTTP 400.
+  json_instead_of_bytes: >-
+    append noRedirect=true to a download URL to receive a JSON object carrying downloadUrl instead
+    of the file bytes or an HTTP 302
+  error_shape_differs: >-
+    Media URLs reply with a plain HTTP status and at most a short text body, NOT the structured
+    error envelope. Branch on the status code here rather than parsing an error object.
+localization:
+  data_locale:
+    param: dataLocale
+    description: locale for the content of the data (metadata field values), when the provider
+      supports data localization; supported locales come from /system/providerInfo
+  ui_locale:
+    param: uiLocale
+    description: locale for UI elements such as metadata field labels
+    enum:
+    - en
+    - de
+    - fr
+    - es
+    - ja
+    - zh
+    default: en
+  time_zone:
+    param: timeZone
+    description: IANA timezone for date/time formatting; read by the AdmiralCloud and Asana
+      integrations only
+capability_negotiation:
+  mechanism: provider capability flags
+  read_from: GET /system/providerInfo and GET /auth/providers
+  note: >-
+    The central convention of the whole platform. Because one contract fronts many systems, a
+    client is expected to read the connected provider's capabilities before exposing an affordance
+    — whether it supports similarity search, parallel search, tasking, brand hub, upload with
+    relink, which hash algorithm it reports, its asset upload size ceiling, whether search can be
+    scoped to a folder. The 501 errors integration-not-implemented and integration-not-supported
+    exist to catch clients that skip this step.
+error_envelope:
+  format: custom JSON — not RFC 9457
+  discriminator: error.source distinguishes cihub faults from integration (DAM) faults
+  see: errors/ci-hub-problem-types.yml
+rate_limiting:
+  documented: token exchange only, 60/minute per partner
+  observed: platform-wide 7500 per 300s on live.ci-hub.com, undocumented
+  headers: RateLimit-Limit / RateLimit-Remaining / RateLimit-Reset, plus X-RateLimit-* legacy
+    equivalents; Retry-After on 429
+  see: rate-limits/ci-hub-rate-limits.yml
+versioning:
+  scheme: single URL prefix
+  current: /api/v1
+  note: >-
+    "The Access SDK API is served under /api/v1 and is not versioned beyond that prefix: changes
+    ship in place rather than under a new version." Additive changes — new response fields, new
+    optional parameters, new endpoints — ship without notice. Clients are told to read response
+    fields by name and ignore unrecognized fields. Breaking changes are avoided and announced on
+    the changelog before they ship.
+  see: lifecycle/ci-hub-lifecycle.yml
+request_tracing:
+  request_id_header: null
+  documented: false
+  note: >-
+    No request-id, correlation-id or traceparent convention is documented. When filing a ticket
+    the docs ask for the `details` field and a recent timestamp instead, which is a weaker handle
+    than an echoed request id for a broker that fans out to third-party systems.
+events:
+  webhooks: false
+  streaming: false
+  note: >-
+    No webhook, event or streaming surface is documented on either SDK. The model is
+    request/response plus browser-redirect polling for DAM login. See asyncapi/ — nothing to
+    capture.
+field_expansion:
+  supported: false
+  note: >-
+    No sparse-fieldset or expansion parameter. Filtering is done with the `filters` query
+    parameter, whose option ids come from the `filters` block of the previous response, so it is
+    discovery-driven rather than declared up front.
+x-evidence:
+  fetched: '2026-08-12'
+  checks:
+  - url: https://developer.ci-hub.com/access/concepts/pagination
+    http_status: 200
+  - url: https://developer.ci-hub.com/access/concepts/url-placeholders
+    http_status: 200
+  - url: https://developer.ci-hub.com/access/authentication
+    http_status: 200
+  - url: https://developer.ci-hub.com/access/llms-full.txt
+    http_status: 200

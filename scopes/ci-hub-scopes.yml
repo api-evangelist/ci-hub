@@ -1,0 +1,69 @@
+generated: '2026-08-12'
+method: probed
+source: https://mcp-auth.ci-hub.com/.well-known/oauth-authorization-server
+docs: https://ci-hub.com/ai/mcp-server
+note: >-
+  The Access SDK HTTP API has no OAuth scope surface — it authenticates by partner-JWT token
+  exchange plus a per-DAM connection token, so derive-oauth-scopes.py correctly found nothing
+  there. The scope surface belongs to the MCP server: mcp.ci-hub.com is an OAuth 2.1 protected
+  resource whose authorization server publishes RFC 8414 metadata anonymously. That metadata
+  declares exactly one scope. Values below are read verbatim from the live document; nothing is
+  inferred.
+applies_to: ci-hub:mcp
+authorization_server: https://mcp-auth.ci-hub.com
+endpoints:
+  authorization: https://mcp-auth.ci-hub.com/authorize
+  token: https://mcp-auth.ci-hub.com/token
+  userinfo: https://mcp-auth.ci-hub.com/userinfo
+  jwks: https://mcp-auth.ci-hub.com/jwks.json
+  registration: https://mcp-auth.ci-hub.com/register
+flows:
+  grant_types:
+  - authorization_code
+  - refresh_token
+  response_types:
+  - code
+  response_modes:
+  - query
+  code_challenge_methods:
+  - S256
+  token_endpoint_auth_methods:
+  - client_secret_basic
+  - client_secret_post
+  - none
+  dynamic_client_registration: true
+  subject_types:
+  - public
+  id_token_signing_alg:
+  - RS256
+scopes:
+- name: cihub
+  description: >-
+    The single scope advertised by the CI HUB MCP authorization server. It is coarse: it does not
+    subdivide by asset operation, by DAM provider, or by read versus write. Effective authority
+    is not decided by this scope but downstream — each end user separately authenticates the DAM
+    accounts they want reachable, and CI HUB maps that user's existing DAM permissions onto every
+    tool call. A consumer cannot narrow an MCP client's authority through the OAuth grant; the
+    narrowing happens in the DAM.
+  source: authorization-server-metadata
+claims_supported:
+- sub
+- iss
+- aud
+- exp
+- iat
+- scope
+summary:
+  scope_count: 1
+  granularity: coarse
+  read_write_split: false
+  per_provider_scopes: false
+x-evidence:
+  fetched: '2026-08-12'
+  checks:
+  - url: https://mcp-auth.ci-hub.com/.well-known/oauth-authorization-server
+    http_status: 200
+  - url: https://mcp-auth.ci-hub.com/.well-known/openid-configuration
+    http_status: 200
+  - url: https://mcp.ci-hub.com/.well-known/oauth-protected-resource
+    http_status: 200

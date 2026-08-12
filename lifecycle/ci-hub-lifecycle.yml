@@ -1,0 +1,111 @@
+generated: '2026-08-12'
+method: searched
+source: https://developer.ci-hub.com/access/changelog
+note: >-
+  CI HUB publishes a stated stability contract for the Access SDK and a dated changelog to
+  announce breaks against. What it does not publish is anything operational: there is no status
+  page at any obvious hostname, no SLA, no uptime history and no incident feed — status.ci-hub.com
+  does not resolve. For an API whose whole job is brokering to third-party systems, that absence
+  is the notable finding: a partner platform whose users cannot reach their DAM has no CI HUB
+  surface that tells them whether the fault is CI HUB or the DAM. The `error.source` field is the
+  only public instrument for that question, and it only helps once a call actually returns.
+versioning:
+  scheme: single URL prefix
+  current_version: v1
+  base: /api/v1
+  policy: >-
+    "The Access SDK API is served under /api/v1 and is not versioned beyond that prefix: changes
+    ship in place rather than under a new version."
+  additive_changes: >-
+    New response fields, new optional parameters and new endpoints are treated as backward
+    compatible and ship WITHOUT NOTICE. Clients are instructed to read response fields by name and
+    ignore any field they do not recognize.
+  breaking_changes: >-
+    Avoided; when one becomes unavoidable it is announced on the changelog before it ships. No
+    minimum notice period is stated.
+  source: https://developer.ci-hub.com/access/changelog
+deprecation:
+  policy_published: false
+  sunset_header: false
+  deprecation_header: false
+  rfc8594: false
+  note: >-
+    No deprecation policy, no Sunset or Deprecation response headers, and no stated notice window.
+    The changelog is described as the place a breaking change is announced, which is a
+    communication channel rather than a policy.
+  deprecated_in_spec:
+  - field: ProviderCapabilities.directAssetUpload
+    marked: deprecated
+    source: openapi/ci-hub-access-openapi.yml
+    note: >-
+      The only element carrying an explicit deprecation marker in the whole contract. Its own
+      description also notes that the uploadUrl of the target folder it depended on is "a legacy
+      field though and not send anymore".
+  legacy_surfaces_named_but_not_deprecated:
+  - what: top-level `message` / `details` / `errorCode` on the error envelope
+    note: >-
+      Explicitly kept "for clients that pre-date the structured envelope". New integrations are
+      told to read error.* only, but the legacy fields carry no deprecation marker or removal date.
+  - what: DAM-sourced errors still on the legacy error path
+    note: >-
+      Documented as mid-migration: some integration errors still arrive as
+      {"message":"Error","details":"..."} with no `error` object. No completion date is given.
+  - what: '@ci-hub/access-sdk upload() and update()'
+    note: >-
+      The inverse case — declared with their final signatures and throwing NotImplementedError so
+      that code written today keeps compiling when the write engine ships. Forward compatibility
+      rather than deprecation.
+status_page:
+  published: false
+  probed:
+  - url: https://status.ci-hub.com/
+    result: NXDOMAIN
+  - url: https://ci-hub.com/support
+    http_status: 200
+    result: no status or uptime link present
+sla:
+  published: false
+  note: No SLA, uptime target or support-response commitment is published on the public site.
+support:
+  help_center: https://support.ci-hub.com/
+  support_page: https://ci-hub.com/support
+  escalation_model: >-
+    The docs define a support chain rather than an SLA — end user, partner platform, CI HUB, DAM
+    provider — and use error.source to route a ticket to the right link in it. cihub errors go to
+    CI HUB; integration errors go to the DAM owner.
+release_history:
+  access_sdk:
+  - date: '2026-07'
+    kind: additive
+    note: DAM login accepts provider parameters (serverUrl); email in the exchange request body
+      documented
+  - date: '2026-06'
+    kind: initial
+    note: Phase 1, first release of the Access SDK — read-only access to a connected DAM
+  see: changelog/ci-hub-changelog.yml
+  connector_product:
+    note: >-
+      The Connector desktop/plugin product has its own release stream announced on the marketing
+      blog (versions 1.1.100, 1.2.11, 1.2.36, 1.2.64 among them). That is a separate lifecycle
+      from the API and is not versioned with it.
+maturity:
+  access_sdk: >-
+    Young and honest about it. First release June 2026, read-only, with the write engine named as
+    future work in the client library rather than implied. The npm package sits at 0.2.0.
+  mcp_server: >-
+    Shipping. Full read and write tool surface with published tool names, OAuth 2.1 with dynamic
+    client registration, and a documented concurrency ceiling — a broader capability surface than
+    the REST API it sits beside.
+  integration_sdk: >-
+    The mature side of the platform. 60-plus integrations exist in production behind the CI HUB
+    Connector; the SDK is the packaging of a contract that has been running for years.
+x-evidence:
+  fetched: '2026-08-12'
+  checks:
+  - url: https://developer.ci-hub.com/access/changelog
+    http_status: 200
+  - url: https://status.ci-hub.com/
+    http_status: 0
+    note: DNS NXDOMAIN — no status page at the conventional hostname
+  - url: https://ci-hub.com/support
+    http_status: 200

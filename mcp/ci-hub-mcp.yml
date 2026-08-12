@@ -1,0 +1,137 @@
+generated: '2026-08-12'
+method: searched
+status: published
+source: https://ci-hub.com/ai/mcp-server
+name: CI HUB MCP Server
+marketing_name: CI HUB Bright AI Connector
+description: >-
+  A hosted, remote MCP server that gives an AI client governed access to whichever DAM, PIM, CMS
+  or cloud-storage systems the end user has connected through CI HUB. The pitch is a governance
+  layer rather than a convenience layer: rather than staff pasting assets into a chat window or
+  circulating stale brand material, the AI reads the DAM directly and inherits that user's own
+  DAM permissions, because each user authenticates their own DAM account through CI HUB before
+  the AI can reach anything.
+transport:
+  hosted: true
+  url: https://mcp.ci-hub.com
+  endpoints_probed:
+  - path: /
+    method: POST
+    status: 401
+    note: JSON-RPC entry point; returns WWW-Authenticate with a resource_metadata pointer
+  - path: /mcp
+    status: 401
+  - path: /sse
+    status: 401
+    note: an SSE path exists and is auth-gated, so both streamable-HTTP and SSE appear to be served
+  - path: /health
+    status: 200
+    body: '{"status":"ok","timestamp":"..."}'
+  server_stack: Express (x-powered-by header)
+authorization:
+  model: OAuth 2.1 with PKCE, per the MCP authorization spec
+  challenge: >-
+    WWW-Authenticate: Bearer error="unauthorized", error_description="Authorization needed",
+    resource_metadata="https://mcp.ci-hub.com/.well-known/oauth-protected-resource"
+  protected_resource_metadata: https://mcp.ci-hub.com/.well-known/oauth-protected-resource
+  authorization_server: https://mcp-auth.ci-hub.com
+  authorization_server_metadata: https://mcp-auth.ci-hub.com/.well-known/oauth-authorization-server
+  dynamic_client_registration: true
+  registration_endpoint: https://mcp-auth.ci-hub.com/register
+  pkce: S256
+  grant_types:
+  - authorization_code
+  - refresh_token
+  scopes:
+  - cihub
+  end_user_step: >-
+    Beyond the OAuth handshake with CI HUB, each user separately authenticates the DAM accounts
+    they want reachable. Users can change which systems are authenticated by disconnecting and
+    reconnecting to the MCP server.
+  see: scopes/ci-hub-scopes.yml
+clients_supported:
+- ChatGPT
+- Claude
+- Gemini
+- Microsoft Copilot
+- any MCP-compatible client
+tools_source: https://support.ci-hub.com/ci-hub-bright-mcp-server-capabilities-and-actions
+tools_note: >-
+  Tool NAMES below are published verbatim by CI HUB in its capabilities article. Input SCHEMAS
+  are not published and could not be read: tools/list returns 401 until an OAuth token is
+  presented, so the live inputSchema for each tool requires authenticated introspection. Nothing
+  below is invented — no parameters are asserted, only the names and grouping CI HUB documents.
+tools:
+- name: Get-Available-Providers
+  category: core
+- name: Get-Brand-Config
+  category: core
+- name: Convert-File-To-Text
+  category: core
+- name: Search-Asset
+  category: asset
+- name: Upload-Asset-By-URL
+  category: asset
+  note: CI HUB documents that uploads from an external URL are not supported at present
+- name: Delete-Asset
+  category: asset
+- name: Get-Asset-Download-URL
+  category: asset
+- name: Rename-Asset
+  category: asset
+- name: Asset-Versions
+  category: asset
+- name: Move-Asset
+  category: asset
+- name: Browse-Folders
+  category: folder
+- name: Create-Folder
+  category: folder
+- name: Delete-Folder
+  category: folder
+- name: Rename-Folder
+  category: folder
+- name: Move-Folder
+  category: folder
+- name: Batch-Create-Folder
+  category: batch
+- name: Batch-Delete-Asset
+  category: batch
+- name: Batch-Delete-Folder
+  category: batch
+- name: Batch-Rename-Asset
+  category: batch
+- name: Batch-Rename-Folder
+  category: batch
+- name: Batch-Upload-Asset-By-URL
+  category: batch
+limits:
+  batch_actions_per_request: 10
+  concurrent_operations: 5
+  note: >-
+    CI HUB documents up to 10 actions per batch request, with a maximum of 5 executing
+    concurrently and the remainder queued.
+summary:
+  tool_count: 21
+  read_tools: 6
+  write_tools: 9
+  batch_tools: 6
+  schemas_available: false
+crosswalk: mcp/ci-hub-tool-crosswalk.yml
+x-evidence:
+  fetched: '2026-08-12'
+  checks:
+  - url: https://mcp.ci-hub.com/
+    method: POST
+    http_status: 401
+    note: JSON-RPC tools/list rejected; WWW-Authenticate carries the RFC 9728 resource_metadata pointer
+  - url: https://mcp.ci-hub.com/.well-known/oauth-protected-resource
+    http_status: 200
+  - url: https://mcp.ci-hub.com/.well-known/oauth-authorization-server
+    http_status: 200
+  - url: https://mcp.ci-hub.com/health
+    http_status: 200
+  - url: https://ci-hub.com/ai/mcp-server
+    http_status: 200
+  - url: https://support.ci-hub.com/ci-hub-bright-mcp-server-capabilities-and-actions
+    http_status: 200

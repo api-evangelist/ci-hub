@@ -1,0 +1,270 @@
+generated: '2026-08-12'
+method: searched
+source: https://developer.ci-hub.com/access/errors
+also_derived_from: openapi/ci-hub-access-openapi.yml
+format: custom
+rfc9457: false
+note: >-
+  CI HUB publishes a complete, dated error-code catalogue for the Access SDK — 26 codes across 9
+  HTTP statuses, each with the condition that raises it and the action to take. It is not RFC
+  9457: responses are application/json rather than application/problem+json and the envelope is
+  CI HUB's own shape, not type/title/detail/instance. What it does carry, and what RFC 9457 does
+  not require, is a `source` field that names WHO owns the failure — CI HUB itself or the DAM
+  provider behind it. For a broker sitting between a partner platform and 60-plus third-party
+  systems, that is the field that decides which support queue a ticket goes to, and it is the
+  most useful thing in this catalogue.
+envelope:
+  content_type: application/json
+  shape:
+    error:
+      status: HTTP status mirrored in the body — always present
+      code: machine-readable identifier, format {source}-{error-type} in kebab-case — always present
+      source: cihub or integration — always present
+      message: human-readable summary, safe to display to end users — always present
+      details: structured or string context; for logs, not end users — optional
+      provider: DAM that produced the error; present only when source is integration — optional
+  legacy_mirrors:
+    message: constant string "Error" at the top level — NOT the human-readable message
+    errorCode: top-level mirror of error.code
+    details: route prefix plus error.message; different from error.details
+  caveat: >-
+    CI HUB states that integration-sourced errors are still being migrated to this envelope, so
+    some DAM errors still arrive as {"message":"Error","details":"..."} with no `error` object.
+    Check that `error` exists before reading `error.code`.
+  observed:
+    url: https://live.ci-hub.com/api/v1/system/providerInfo
+    http_status: 401
+    body: '{"message":"Error","details":"GET /api/v1/system/providerInfo failed: Missing CI HUB
+      access token","errorCode":"cihub-access-token-missing","error":{"code":"cihub-access-token-missing","source":"cihub","status":401,"message":"CI
+      HUB access token is missing","details":"Missing CI HUB access token"}}'
+    note: fetched anonymously; confirms both the structured envelope and the legacy top-level mirrors
+sources:
+- id: cihub
+  meaning: CI HUB rejected the request. Direct support tickets to CI HUB.
+- id: integration
+  meaning: A DAM provider rejected the request. Direct support to the DAM owner.
+problem_types:
+- code: cihub-sdk-email-missing
+  status: 400
+  source: cihub
+  title: No usable email for JIT user resolution
+  when: No email in the JWT claim or the request body, or the resolved value fails email-format validation.
+  remediation: Include email in the JWT payload or send it in the request body. Verify it parses
+    as a valid email.
+- code: cihub-validation-error
+  status: 400
+  source: cihub
+  title: Schema validation failed
+  when: A required parameter is missing or malformed.
+  remediation: Check the endpoint reference. The details field carries the validation message.
+- code: cihub-bad-request
+  status: 400
+  source: cihub
+  title: Route-specific validation failed
+  when: An ad-hoc validation rejected the request body or query, outside schema validation.
+  remediation: Check the endpoint reference. The details field names the issue.
+- code: integration-operation-failed
+  status: 400
+  source: integration
+  title: DAM rejected the operation
+  when: A DAM operation was rejected by the provider with a request-level error.
+  remediation: The details field carries the upstream message. Surface it or route it to the DAM
+    owner.
+- code: cihub-sdk-token-missing
+  status: 401
+  source: cihub
+  title: Partner JWT absent on exchange
+  when: Authorization header absent on the exchange call.
+  remediation: 'Send Authorization: Bearer <partner-signed-jwt>.'
+- code: cihub-sdk-token-invalid
+  status: 401
+  source: cihub
+  title: Partner JWT rejected
+  when: Malformed JWT, wrong algorithm, missing required header or claim, signature verification
+    failed, iat more than 30s in the future, or iat older than maxTokenAge.
+  remediation: Mint a fresh JWT. Verify alg RS256, that kid matches a key in the JWKS, and that
+    all required claims are present. Sign a new token per exchange.
+- code: cihub-sdk-token-expired
+  status: 401
+  source: cihub
+  title: Partner JWT expired
+  when: Partner JWT past exp.
+  remediation: Mint a new JWT with a fresh iat and exp.
+- code: cihub-access-token-missing
+  status: 401
+  source: cihub
+  title: CI HUB access token absent
+  when: Authorization header absent on a post-exchange API call.
+  remediation: 'Send Authorization: Bearer <CI HUB access_token>.'
+- code: cihub-access-token-invalid
+  status: 401
+  source: cihub
+  title: CI HUB access token invalid or expired
+  when: Access token present but invalid or expired.
+  remediation: Mint a new access token using the refresh token. If refresh fails, run the token
+    exchange again.
+- code: cihub-refresh-token-invalid
+  status: 401
+  source: cihub
+  title: Refresh token not a refresh token, or subject mismatch
+  when: On GET /auth/refreshToken, the provider-authorization token is not a CI HUB refresh token,
+    or its sub does not match the access token's sub.
+  remediation: Send the refresh token returned by exchange in provider-authorization. If it has
+    expired, run the token exchange again.
+- code: integration-auth-failed
+  status: 401
+  source: integration
+  title: DAM rejected the forwarded authentication
+  when: Token revoked at the DAM, or a failed token refresh on the DAM side. provider names the
+    integration.
+  remediation: Refresh the DAM token where supported, otherwise restart the DAM login flow.
+- code: cihub-sdk-no-subscription
+  status: 402
+  source: cihub
+  title: No active SDK subscription
+  when: Partner company has no active SDK subscription, or the assigned product is not enabled
+    for SDK use.
+  remediation: Contact the CI HUB partner manager. Resolution is operational.
+- code: cihub-license-required
+  status: 402
+  source: cihub
+  title: User has no active license
+  when: The user has no active license for the requested product.
+  remediation: Confirm the user is associated with the partner company and the subscription has
+    seats available.
+- code: cihub-sdk-partner-unknown
+  status: 403
+  source: cihub
+  title: Issuer not a registered partner
+  when: The iss claim is not registered in sdk.partners.
+  remediation: Verify the issuer string matches the registered value exactly, including trailing
+    slash.
+- code: cihub-sdk-audience-invalid
+  status: 403
+  source: cihub
+  title: Audience mismatch
+  when: The aud claim does not match the registered audience.
+  remediation: Set aud to the registered value (default https://api.ci-hub.com).
+- code: cihub-access-denied
+  status: 403
+  source: cihub
+  title: Whitelist or role check rejected the request
+  when: An account-level allowlist or role check failed.
+  remediation: The details field describes the rejected check. The fix is typically operational.
+- code: provider-access-token-missing
+  status: 403
+  source: cihub
+  title: DAM connection token absent
+  when: A content call requires a DAM connection token but no provider-authorization header was
+    sent.
+  remediation: Complete the DAM login flow for this provider and send the resulting token in
+    provider-authorization.
+- code: provider-access-token-invalid
+  status: 403
+  source: cihub
+  title: DAM connection token failed verification
+  when: The provider-authorization token failed verification, was malformed, or expired. Covers
+    both a DAM connection token on content calls and a CI HUB refresh token on GET /auth/refreshToken.
+  remediation: For a DAM token, re-run the DAM login flow. For a CI HUB refresh token, run the
+    token exchange again.
+- code: integration-forbidden
+  status: 403
+  source: integration
+  title: DAM permission denied
+  when: DAM provider rejected the call with a permission error.
+  remediation: Surface the message to the end user. Permission decisions are governed by the DAM.
+- code: cihub-not-found
+  status: 404
+  source: cihub
+  title: Route does not exist
+  when: The path does not exist on CI HUB.
+  remediation: Check the endpoint reference for the correct route and casing.
+- code: integration-not-found
+  status: 404
+  source: integration
+  title: Asset or folder not found in the DAM
+  when: Asset or folder does not exist in the DAM, or the user cannot see it.
+  remediation: Re-query the parent folder. The asset may have been moved or deleted in the DAM.
+- code: integration-not-available
+  status: 404
+  source: integration
+  title: Requested rendition not available
+  when: The asset exists but the requested rendition or download form is not available.
+  remediation: Fall back to a different rendition. Check providerInfo for supported renditions.
+- code: cihub-conflict
+  status: 409
+  source: cihub
+  title: Action conflicts with current state
+  when: Resource already exists, trial already activated, and similar.
+  remediation: The details field describes the conflict.
+- code: cihub-rate-limited
+  status: 429
+  source: cihub
+  title: Partner rate limit exceeded
+  when: Per-partner rate limit on the exchange endpoint exceeded (default 60 requests per minute,
+    configurable per partner).
+  remediation: Back off and retry. Honor the standard RateLimit-* headers and Retry-After.
+  see: rate-limits/ci-hub-rate-limits.yml
+- code: cihub-internal-error
+  status: 500
+  source: cihub
+  title: Explicit internal error
+  when: An explicit 500 emitted by route code.
+  remediation: Retry once. File a ticket with the details field and a recent timestamp if it
+    persists.
+- code: cihub-unknown-error
+  status: 500
+  source: cihub
+  title: Unhandled exception
+  when: An unhandled exception reached the route safety net. status echoes the underlying error's
+    status, or 500 if missing.
+  remediation: Retry once. File a ticket with the timestamp; CI HUB logs carry the stack trace.
+- code: integration-not-implemented
+  status: 501
+  source: integration
+  title: Integration does not implement this operation yet
+  when: The DAM integration does not implement this operation. The capability is intended but
+    absent today.
+  remediation: Gate the affordance in the host UI based on the provider's capability flags.
+- code: cihub-not-implemented
+  status: 501
+  source: cihub
+  title: Client method declared but not yet backed
+  when: 'Thrown client-side by @ci-hub/access-sdk for upload() and update(), which carry their
+    final signatures but have no server behind them until the write engine ships.'
+  remediation: Use the MCP server's write tools, or wait for the Access SDK write release.
+  source_note: from the client library reference, not the HTTP error catalogue
+- code: integration-not-supported
+  status: 501
+  source: integration
+  title: DAM does not support this feature
+  when: The DAM provider does not support this feature at all.
+  remediation: Permanent. Check providerInfo before exposing the affordance.
+summary:
+  code_count: 29
+  documented_by_provider: 28
+  statuses:
+  - 400
+  - 401
+  - 402
+  - 403
+  - 404
+  - 409
+  - 429
+  - 500
+  - 501
+  cihub_sourced: 19
+  integration_sourced: 8
+  notable: >-
+    402 Payment Required is a live, documented status here, not a curiosity — both
+    cihub-sdk-no-subscription and cihub-license-required return it, and the docs are explicit
+    that resolution is commercial rather than technical.
+x-evidence:
+  fetched: '2026-08-12'
+  checks:
+  - url: https://developer.ci-hub.com/access/errors
+    http_status: 200
+  - url: https://developer.ci-hub.com/access/llms-full.txt
+    http_status: 200
+  - url: https://live.ci-hub.com/api/v1/system/providerInfo
+    http_status: 401

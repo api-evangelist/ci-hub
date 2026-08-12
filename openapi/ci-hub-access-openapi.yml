@@ -1,0 +1,2739 @@
+openapi: 3.1.0
+info:
+  title: CI HUB Access SDK API
+  version: v1
+  summary: 'Embed CI HUB asset connectivity into a partner platform: exchange a partner-signed JWT for
+    a CI HUB session, connect an end user to a DAM provider, then browse, search and read assets from
+    that DAM over one uniform contract.'
+  description: 'The CI HUB Access SDK API is the HTTP surface a partner platform calls to reach any DAM,
+    MAM, PIM, cloud-storage or work-management system CI HUB connects to, without integrating each one
+    separately.
+
+
+    Authentication is a token exchange: the partner backend signs an RS256 JWT for the user and exchanges
+    it at `POST /auth/exchangeToken` for a CI HUB access token (1 hour) and refresh token (30 days). The
+    end user then connects a DAM provider through `POST /auth/login`, which returns a redirect URI plus
+    a `state` the partner polls at `GET /auth/login`. From that point every content call carries two tokens:
+    the CI HUB access token in `Authorization` and the DAM connection token in `provider-authorization`.
+
+
+    Content is read-only in this release: folder browse, keyword search, similarity search by reference
+    image, asset detail and asset version history. Every failure returns one error envelope whose `error.source`
+    separates CI HUB platform faults (`cihub`) from DAM provider faults (`integration`).
+
+
+    The API is served under the `/api/v1` prefix and is not versioned beyond it; additive changes ship
+    in place, breaking changes are announced on the changelog before they ship.'
+  termsOfService: https://ci-hub.com/legal/terms
+  contact:
+    name: CI HUB GmbH
+    url: https://developer.ci-hub.com/access
+externalDocs:
+  description: CI HUB Access SDK reference
+  url: https://developer.ci-hub.com/access
+servers:
+- url: https://live.ci-hub.com/api/v1
+  description: Production
+- url: https://stage.ci-hub.com/api/v1
+  description: Staging / integration environment used throughout the published examples
+security:
+- cihubAccessToken: []
+paths:
+  /auth/exchangeToken:
+    post:
+      operationId: exchangeToken
+      summary: Exchange token
+      description: 'Exchanges a partner-signed JWT for CI HUB access and refresh tokens. Required as the
+
+        first call of every Access SDK session.
+
+
+        ## Partner JWT
+
+
+        Send the partner-signed JWT as `Authorization: Bearer <partner-signed-jwt>`.
+
+
+        ### Header
+
+
+        | Field | Required | Value |
+
+        |---|---|---|
+
+        | `alg` | yes | `RS256` |
+
+        | `kid` | yes | Must match a key published in the partner JWKS |
+
+        | `typ` | optional | `JWT` |
+
+
+        `HS256` is not accepted.
+
+
+        ### Payload
+
+
+        | Claim | Type | Required | Notes |
+
+        |---|---|---|---|
+
+        | `iss` | string | yes | Partner issuer URL. Must match the registered value exactly, including
+        trailing slash. |
+
+        | `aud` | string | yes | Registered audience. Default `https://api.ci-hub.com`. |
+
+        | `sub` | string | yes | Stable identifier for the user in the partner system. |
+
+        | `iat` | number | yes | Unix seconds. Tolerance: up to 30 seconds in the future. The token is
+        rejected once it is older than `maxTokenAge` (now minus `iat`). |
+
+        | `exp` | number | yes | Unix seconds. Must be in the future. |
+
+        | `email` | string | yes (in JWT or body) | Used for just-in-time (JIT) user resolution: CI HUB
+        finds the matching user or creates one on first exchange. Must parse as an email. JWT value takes
+        precedence over body. |
+
+        | `given_name` | string | optional | First name. Falls back to splitting `name`. |
+
+        | `family_name` | string | optional | Last name. Falls back to splitting `name`. |
+
+        | `name` | string | optional | Display name. Used when `given_name` and `family_name` are absent.
+        |
+
+
+        The token must be no older than `maxTokenAge` seconds (default 3600), measured from
+
+        `iat` to the current time. Sign a fresh JWT for each exchange. Stale tokens are
+
+        rejected with `cihub-sdk-token-invalid`.
+
+
+        Send `Content-Type: application/json` so the JSON body parser picks up the request.
+
+        Only an `application/json` body is parsed for the `email` field; other content types
+
+        leave it unread. Name fields are not read from the body. They come from the partner
+
+        JWT claims (`given_name`, `family_name`, `name`).'
+      requestBody:
+        description: 'Optional. Used only as a fallback for partners that cannot include the `email`
+
+          claim in the partner JWT. If the JWT contains `email`, the body value is ignored.
+
+          The request must include `email` somewhere (JWT or body). If your JWT already
+
+          carries `email`, send `{}`.'
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  description: Fallback email for JIT user resolution when the JWT has no `email` claim.
+                  format: email
+                  examples:
+                  - jane@customer.example.com
+      responses:
+        '200':
+          description: '@description Token exchange successful.'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                    description: 'CI HUB access token. Sent on subsequent calls as `Authorization: Bearer
+                      <access_token>`. Valid for 1 hour.'
+                    examples:
+                    - eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                  refresh_token:
+                    type: string
+                    description: CI HUB refresh token. 30-day lifetime. Used to mint new access tokens.
+                    examples:
+                    - eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                  expires_in:
+                    type: number
+                    description: Access token lifetime in seconds. Always 3600.
+                    examples:
+                    - 3600
+                  token_type:
+                    type: string
+                    const: Bearer
+                    description: Always `Bearer`.
+                required:
+                - access_token
+                - refresh_token
+                - expires_in
+                - token_type
+        '400':
+          description: '`cihub-sdk-email-missing`: no `email` claim and no body fallback, or the value
+
+            fails format validation.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: '| Code | When |
+
+            |---|---|
+
+            | `cihub-sdk-token-missing` | No `Authorization` header. |
+
+            | `cihub-sdk-token-invalid` | Malformed JWT, wrong algorithm, missing required field, signature
+            failed, `iat` more than 30s in the future, token older than `maxTokenAge` (now minus `iat`).
+            |
+
+            | `cihub-sdk-token-expired` | JWT past `exp`. |
+
+
+            `cihub-sdk-token-invalid` is rarely also returned when CI HUB fails to persist
+
+            the user during the exchange (transient backend fault). If a known-good JWT
+
+            suddenly fails, retry once before treating the token as the problem.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '402':
+          description: '`cihub-sdk-no-subscription`: the partner company has no active SDK subscription.
+
+            Contact CI HUB before retrying.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: '| Code | When |
+
+            |---|---|
+
+            | `cihub-sdk-partner-unknown` | `iss` claim not registered as an SDK partner. |
+
+            | `cihub-sdk-audience-invalid` | `aud` claim does not match the registered audience. |'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: '`cihub-rate-limited`: the partner exceeded its exchange rate limit. Standard
+
+            `RateLimit-*` headers describe the window; back off and retry after it resets.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+      security:
+      - cihubAccessToken: []
+  /auth/checkToken:
+    get:
+      operationId: checkTokenSdk
+      summary: Check token
+      description: 'Verifies that a CI HUB access token is still valid and returns the user profile
+
+        envelope the partner platform needs to display in its UI. Typical use: confirm an
+
+        active session before rendering a CI HUB-backed view, or revalidate after a long
+
+        idle period.
+
+
+        `licenseState`, `licenseExpires`, and `isTrialLicense` describe the SDK
+
+        subscription, not the DAM provider. They are informational; the SDK subscription
+
+        itself is re-checked on every call.
+
+
+        A 401 here is the cue to start a new exchange. A 402 means the subscription state
+
+        changed: contact CI HUB before retrying.'
+      responses:
+        '200':
+          description: '@description Token is valid.'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  adapter:
+                    type: string
+                    description: Always "CI HUB".
+                    examples:
+                    - CI HUB
+                  source:
+                    type: string
+                    description: CI HUB host that served the response.
+                    examples:
+                    - api.ci-hub.com
+                  user:
+                    type: string
+                    description: Display name composed from the user record.
+                    examples:
+                    - Jane Doe
+                  account:
+                    type: string
+                    description: Email address tied to the user record.
+                    examples:
+                    - jane@customer.example.com
+                  licenseState:
+                    type: string
+                    description: Always "Subscription" for SDK partners.
+                    examples:
+                    - Subscription
+                  licenseExpires:
+                    type: number
+                    description: 'Unix milliseconds. End of the active SDK subscription''s last day in
+                      UTC.
+
+                      Perpetual subscriptions emit a far-future sentinel; treat any value greater
+
+                      than `Date.now()` as valid.'
+                    examples:
+                    - 1798761599999
+                  isTrialLicense:
+                    type: boolean
+                    description: Always false for SDK partners.
+                    examples:
+                    - false
+                  userHash:
+                    type: string
+                    description: Stable, opaque per-user identifier suitable for partner-side analytics.
+                    examples:
+                    - a1b2c3d4e5f6g7h8i9j0k1l2
+        '401':
+          description: '| Code | When |
+
+            |---|---|
+
+            | `cihub-access-token-missing` | No `Authorization` header. |
+
+            | `cihub-access-token-invalid` | Token signature failed, token expired, or the user record
+            was removed. |'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '402':
+          description: '@description `cihub-sdk-no-subscription`: the partner''s SDK subscription is no
+            longer active.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: '`cihub-sdk-partner-unknown`: the partner registration was removed since the
+
+            access token was issued.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: '@description `cihub-internal-error`: the subscription re-check failed transiently.
+            Safe to retry.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+      security:
+      - cihubAccessToken: []
+  /auth/refreshToken:
+    get:
+      operationId: refreshTokenSdk
+      summary: Refresh token
+      description: 'Renews a session. This is a shared endpoint: the token in `provider-authorization`
+
+        decides which session is renewed.
+
+
+        ## CI HUB session
+
+
+        Send the CI HUB refresh token returned at exchange in `provider-authorization` to
+
+        mint a new access token and a new refresh token. `Authorization` carries the current
+
+        access token, which may already be expired (only its signature is checked here).
+
+        The refresh token''s `sub` must match the access token''s `sub`; cross-user refresh
+
+        attempts are rejected.
+
+
+        The new access token is valid for 1 hour, the new refresh token for 30 days.
+
+        Replace both cached tokens with the values returned here. The previous access token
+
+        is superseded and should be discarded by the client, but stays valid until its
+
+        `exp`; the previous refresh token remains valid until its 30-day clock runs out, so
+
+        a slow client switch-over is safe.
+
+
+        Refresh proactively a few minutes before `expires_in`, or reactively after
+
+        receiving `cihub-access-token-invalid` from any endpoint. Once a refresh token
+
+        expires the partner must perform a new exchange.
+
+
+        ## DAM connection
+
+
+        Send the DAM `refresh_token` from the login poll in `provider-authorization` to
+
+        renew a DAM connection token. The token also identifies the provider. Some
+
+        providers only return a new `access_token`; in that case keep the prior
+
+        `refresh_token` and reuse it on the next refresh. A provider with no refresh path
+
+        returns 404: run a fresh DAM login. Handle every provider the same way: try to
+
+        refresh, and fall back to a fresh login if the refresh fails.
+
+
+        The CI HUB SDK subscription is re-checked on every refresh; partners whose
+
+        subscription lapsed receive 402 here and must contact CI HUB before continuing.'
+      responses:
+        '200':
+          description: '@description Token refreshed successfully.'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                    description: New access token (CI HUB session) or new DAM connection token, matching
+                      the refreshed session.
+                    examples:
+                    - eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                  refresh_token:
+                    type: string
+                    description: New refresh token. Some DAM providers omit it; keep and reuse the prior
+                      refresh token then.
+                    examples:
+                    - eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                  expires_in:
+                    type: number
+                    description: Access token lifetime in seconds. Omitted when the DAM provider does
+                      not supply a token lifetime.
+                    examples:
+                    - 3600
+                  token_type:
+                    type: string
+                    description: Token type for the Authorization header.
+                    examples:
+                    - Bearer
+                required:
+                - access_token
+                - token_type
+        '401':
+          description: '| Code | When |
+
+            |---|---|
+
+            | `cihub-access-token-missing` | No `Authorization` header. |
+
+            | `cihub-access-token-invalid` | Access token signature failed or was malformed. An expired
+            access token is accepted here; only signature and format are checked. |
+
+            | `cihub-refresh-token-invalid` | The `provider-authorization` token is not a refresh token
+            (for example an access token sent in its place), or its `sub` does not match the access token''s
+            `sub`. |
+
+
+            A `cihub-refresh-token-invalid`, and any failure once the 30-day refresh window
+
+            has lapsed, is the cue to start a new exchange.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '402':
+          description: '@description `cihub-sdk-no-subscription`: the partner''s SDK subscription is no
+            longer active.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: '| Code | When |
+
+            |---|---|
+
+            | `provider-access-token-missing` | No `provider-authorization` header. |
+
+            | `provider-access-token-invalid` | Refresh token signature failed, was malformed, or has
+            expired. |
+
+            | `cihub-sdk-partner-unknown` | The partner registration was removed since the tokens were
+            issued. |'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: 'The DAM provider has no refresh path. No structured `error` envelope. Run a
+
+            fresh DAM login.'
+        '503':
+          description: '@description `cihub-internal-error`: the subscription re-check failed transiently.
+            Safe to retry.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+      security:
+      - cihubAccessToken: []
+        damToken: []
+  /auth/logout:
+    get:
+      operationId: logoutSdk
+      summary: Logout
+      description: 'Signals the end of a partner-side session. For Access SDK partners this endpoint is
+
+        advisory: CI HUB does not maintain server-side session state for SDK tokens, so
+
+        logout returns 200 without revoking the refresh token. The partner platform is
+
+        responsible for discarding the cached access and refresh tokens locally.
+
+
+        CI HUB does not currently maintain a refresh-token blocklist for Access SDK
+
+        partners. A refresh token remains valid until its 30-day clock runs out, even after
+
+        a logout call. Partners that need stronger revocation guarantees should:
+
+
+        - Drop both the access token and the refresh token from local storage on logout.
+
+        - Not persist refresh tokens beyond the active session.
+
+        - Detect compromise on the partner side and avoid reusing a leaked refresh token.
+
+
+        Server-side revocation is in progress.'
+      responses:
+        '200':
+          description: '@description Logout acknowledged. The response body is the literal string `OK`.'
+        '401':
+          description: '| Code | When |
+
+            |---|---|
+
+            | `cihub-access-token-missing` | No `Authorization` header. |
+
+            | `cihub-access-token-invalid` | Access token signature failed or was malformed. |
+
+
+            A 401 here is harmless from a logout perspective: the token was not valid to
+
+            begin with. The partner should still discard local copies.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+      security:
+      - cihubAccessToken: []
+  /auth/providers:
+    get:
+      operationId: getProvidersSdk
+      summary: Get providers
+      description: 'Returns the list of DAM providers available to the authenticated CI HUB user. The
+
+        partner platform uses the result to render a connection picker and to pass each
+
+        provider''s `id` on subsequent login and content calls.
+
+
+        This endpoint is intentionally lenient on authentication so the partner platform
+
+        can render its connection picker before any DAM session exists. A missing or
+
+        invalid `Authorization` header returns 200 with a single-entry list containing
+
+        only the CI HUB platform connection. When the list contains only `cihub`, refresh
+
+        the access token or start a new exchange.
+
+
+        The provider list is stable for the lifetime of one access token. Cache it for
+
+        that long and refetch after a new exchange.'
+      responses:
+        '200':
+          description: '@description List of available providers'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                      description: '@description Provider identifier'
+                    name:
+                      type: string
+                      description: '@description Provider display name'
+                    version:
+                      type: string
+                      description: '@description Provider version'
+                    logo:
+                      type: object
+                      properties:
+                        data:
+                          type: string
+                          description: Base64 encoded image data
+                          examples:
+                          - data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...
+                        width:
+                          type: number
+                          description: Logo width in pixels
+                          examples:
+                          - 249
+                        height:
+                          type: number
+                          description: Logo height in pixels
+                          examples:
+                          - 77
+                        backgroundColor:
+                          type: string
+                          description: Background color in hex format
+                          examples:
+                          - '#FFFFFF'
+                      description: '@description Provider logo with metadata.'
+                    glyph:
+                      type: object
+                      properties:
+                        data:
+                          type: string
+                          description: Base64 encoded image data
+                          examples:
+                          - data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...
+                        width:
+                          type: number
+                          description: Glyph width in pixels
+                          examples:
+                          - 249
+                        height:
+                          type: number
+                          description: Glyph height in pixels
+                          examples:
+                          - 77
+                        backgroundColor:
+                          type: string
+                          description: Background color in hex format
+                          examples:
+                          - '#FFFFFF'
+                      description: '@description Provider glyph/icon with metadata'
+                    capabilities:
+                      $ref: '#/components/schemas/ProviderCapabilities'
+                    loginUrl:
+                      type: string
+                      description: '@description Login URL for this provider. POST it with `?polling=true`
+                        to run the JSON polling login flow.'
+                    isDefault:
+                      type: boolean
+                      description: '@description Whether this is a default provider'
+                    isOptional:
+                      type: boolean
+                      description: '@description Whether this is an optional provider'
+                    isLicensed:
+                      type: boolean
+                      description: '@description Whether the provider requires a paid tier. This does
+                        not indicate whether the current end user holds that license.'
+                    isUnsupported:
+                      type: boolean
+                      description: Present with value `true` only when the provider is wired but no longer
+                        maintained. Absent otherwise; `false` is never sent.
+                      examples:
+                      - true
+                    unsupportedAdapterTitle:
+                      type: string
+                      description: Title to display when the provider is unsupported. May be absent even
+                        when `isUnsupported` is `true`; null-guard before reading.
+                      examples:
+                      - Ask your DAM Vendor
+                    unsupportedAdapterDescription:
+                      type: string
+                      description: Description to display when the provider is unsupported. May be absent
+                        even when `isUnsupported` is `true`; null-guard before reading.
+                      examples:
+                      - This Solution is not supported today, please ask the DAM Vendor for a status.
+                    isDisabledForHost:
+                      type: boolean
+                      description: '@description Whether this provider is disabled for the current host.'
+        '500':
+          description: '@description Transient backend failure. Safe to retry.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+      security:
+      - cihubAccessToken: []
+  /auth/login:
+    get:
+      operationId: damLoginPoll
+      summary: DAM login (poll)
+      description: 'Returns the current state of a login started by initiate. The `state` value is the
+
+        credential for this call, so no `Authorization` header is needed. Poll on an
+
+        interval until the response carries tokens or an error.
+
+
+        The returned `access_token` is the DAM connection token and is separate from the
+
+        CI HUB access token in your `Authorization` header. Content calls carry both: the
+
+        CI HUB token in `Authorization` and this token in `provider-authorization`.
+
+
+        A successful poll consumes the `state`. A `state` lives for 5 minutes from
+
+        initiate; once it expires (or after a successful poll), further polls take the
+
+        failure path. Cap your loop at the 5-minute horizon and fall back to a fresh login
+
+        on failure.
+
+
+        The poll always answers 200 with a JSON body. An unknown, expired, or consumed
+
+        `state`, and a login the end user failed or canceled at the DAM, all return a body
+
+        carrying an `error` property instead of tokens. Treat any body with `error` as
+
+        final and start a new DAM login.'
+      parameters:
+      - name: state
+        in: query
+        required: true
+        description: '@description The `state` returned by initiate. Identifies and authorizes the call.'
+        schema:
+          type: string
+      - name: polling
+        in: query
+        required: true
+        description: '@description Send `true` on every initiate and poll call; it selects the JSON response
+          shape.'
+        schema:
+          type: boolean
+          const: true
+      responses:
+        '200':
+          description: 'While the state is alive and the user has not finished signing in, the poll
+
+            returns an empty object. Once the login completes, it returns the tokens. A
+
+            dead `state` (unknown, expired, consumed, or failed login) returns an `error`
+
+            property.'
+          content:
+            application/json:
+              schema:
+                anyOf:
+                - type: object
+                - type: object
+                  properties:
+                    access_token:
+                      type: string
+                      description: '@description DAM connection token. Send it as the `provider-authorization`
+                        header on content calls.'
+                    refresh_token:
+                      type: string
+                      description: '@description DAM refresh token. Use it to renew the connection.'
+                    userHash:
+                      type: string
+                      description: '@description Stable, opaque per-user identifier for the connected
+                        DAM account. Optional for partners to use.'
+                  required:
+                  - access_token
+                  - refresh_token
+                - type: object
+                  properties:
+                    error:
+                      type: string
+                      description: Plain-text failure marker.
+                      examples:
+                      - Not found
+                  required:
+                  - error
+      security:
+      - cihubAccessToken: []
+    post:
+      operationId: damLoginInitiate
+      summary: DAM login (initiate)
+      description: 'Starts a login for the provider named in the `provider` query parameter (an `id`
+
+        from the providers listing). DAM login is a two-call flow: the partner platform
+
+        starts a login for a chosen provider, opens the returned URL in the end user''s
+
+        browser, then polls until the end user finishes signing in at the DAM.
+
+
+        Open `redirect_uri` for the end user (popup or full-page redirect). Keep `state`
+
+        for polling.
+
+
+        Failures past the token check (an unknown provider, a provider the user is not
+
+        licensed for, or a rejected sign-in) have not moved to the error envelope yet. They
+
+        currently redirect the browser to a CI HUB URL carrying an `error` query parameter
+
+        with a plain-text message. Treat a redirect or non-JSON response from initiate as a
+
+        failure and read the `error` value.
+
+
+        ## Provider parameters
+
+
+        Several providers are multi-tenant, so CI HUB asks the end user which instance of the
+
+        DAM to sign in to on a page of its own before the provider''s login. A partner platform
+
+        that already knows the instance sends it as `serverUrl` on the initiate call, and that
+
+        page drops out of the flow. `bynder`, `dash`, `fotoware`, `frontify`, `picturepark`,
+
+        and `purered` read it.
+
+
+        It is optional. Omit it and the end user answers the prompt as before. A value the
+
+        provider rejects also falls back to the prompt, so a stale instance URL degrades
+
+        instead of failing the login.'
+      parameters:
+      - name: provider
+        in: query
+        required: true
+        description: '@description Provider identifier from the providers listing.'
+        schema:
+          type: string
+      - name: polling
+        in: query
+        required: true
+        description: '@description Send `true` on every initiate and poll call; it selects the JSON response
+          shape.'
+        schema:
+          type: boolean
+          const: true
+      - name: serverUrl
+        in: query
+        description: 'Provider parameter. The DAM instance the end user signs in to, as a full origin.
+
+          Read by `bynder`, `dash`, `fotoware`, `frontify`, `picturepark`, and `purered`.'
+        schema:
+          type: string
+      responses:
+        '200':
+          description: '@description Login initiated.'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  redirect_uri:
+                    type: string
+                    description: One-time URL to open in the end user's browser so they can authenticate
+                      at the DAM.
+                    examples:
+                    - https://provider.example.com/oauth/authorize?...&state=Pf3a9c...
+                  state:
+                    type: string
+                    description: Opaque token that identifies this login. Pass it to the poll call.
+                    examples:
+                    - Pf3a9c...
+                required:
+                - redirect_uri
+                - state
+        '302':
+          description: 'Legacy failure path: an unknown provider, a provider the user is not licensed
+
+            for, and other failures past the token check redirect to a CI HUB URL with an
+
+            `error` query parameter instead of answering JSON. Disable redirect-following,
+
+            read the `error` value from the `Location` header, and treat it as final.'
+        '401':
+          description: '| Code | When |
+
+            |---|---|
+
+            | `cihub-access-token-missing` | No `Authorization` header. |
+
+            | `cihub-access-token-invalid` | Token signature failed, token expired, or the user record
+            was removed. |'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+      security:
+      - cihubAccessToken: []
+  /system/providerInfo:
+    get:
+      operationId: getProviderInfoSdk
+      summary: Get provider info
+      description: 'Returns runtime details for the DAM provider the end user is connected to: the
+
+        provider''s host prefix, the search filters this connection exposes, and any
+
+        provider-specific settings the partner platform needs to render its UI. The
+
+        provider is identified by the `provider-authorization` token, so there is no
+
+        provider path or query parameter.
+
+
+        This is the post-login companion to the static feature flags in the providers
+
+        listing. The listing tells the partner what a provider supports before connecting;
+
+        this endpoint returns the live details once the end user has logged in.
+
+
+        Treat the object as provider-specific and read only the fields your integration
+
+        needs. A provider with no runtime details returns an empty object.'
+      responses:
+        '200':
+          $ref: '#/components/responses/ProviderInfoResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: '| Code | When |
+
+            |---|---|
+
+            | `cihub-access-token-missing` | No `Authorization` header. |
+
+            | `cihub-access-token-invalid` | CI HUB token signature failed, expired, or the user record
+            was removed. |'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: '| Code | When |
+
+            |---|---|
+
+            | `provider-access-token-missing` | No `provider-authorization` header. Complete a DAM login
+            first. |
+
+            | `provider-access-token-invalid` | The `provider-authorization` token failed verification
+            or expired. Start a new DAM login. |'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      security:
+      - cihubAccessToken: []
+        damToken: []
+  /assets/search:
+    get:
+      operationId: searchAssetsSdk
+      summary: Search assets
+      description: 'Keyword search across assets in the connected DAM. Results include metadata,
+
+        thumbnail, and download URLs; no separate requests are needed to display previews.
+
+        Search behavior, such as which fields a keyword matches, is defined by the DAM.
+
+
+        Providers expose their own filter facets beyond the documented parameters. The
+
+        available facets are returned as `filters` in the response and in provider info;
+
+        send the selected facet values as additional query parameters.'
+      parameters:
+      - name: query
+        in: query
+        description: '@description The search term. When omitted or empty, providers that support it return
+          an unfiltered listing.'
+        schema:
+          type: string
+      - name: parentId
+        in: query
+        description: '@description Search only within the specified folder. Omit or send an empty string
+          for a global search.'
+        schema:
+          type: string
+      - $ref: '#/components/parameters/size'
+      - $ref: '#/components/parameters/more'
+      - $ref: '#/components/parameters/filters'
+      - $ref: '#/components/parameters/timeZone'
+      - $ref: '#/components/parameters/dataLocale'
+      - $ref: '#/components/parameters/uiLocale'
+      responses:
+        '200':
+          $ref: '#/components/responses/SearchAssetsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      security:
+      - cihubAccessToken: []
+        damToken: []
+    post:
+      operationId: searchSimilarAssetsSdk
+      summary: Search by image
+      description: 'Similarity search using a reference image. Provide either Base64-encoded image
+
+        data or an HTTP/HTTPS URL to the image. Not supported by all providers; check the
+
+        provider capabilities in the providers listing.
+
+
+        Providers without this capability answer 501, 404, or 400 depending on the
+
+        integration. Treat any of them as "not supported here".'
+      parameters:
+      - $ref: '#/components/parameters/size'
+      - $ref: '#/components/parameters/more'
+      requestBody:
+        $ref: '#/components/requestBodies/requestBody'
+      responses:
+        '200':
+          $ref: '#/components/responses/SearchAssetsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+      security:
+      - cihubAccessToken: []
+        damToken: []
+  /assets/folder/{folderId}:
+    get:
+      operationId: getFolderSdk
+      summary: Get folder
+      description: 'Browses folder contents. Returns subfolders and assets with metadata and thumbnail
+
+        URLs. Navigation is hierarchical: start from the root folder and traverse by ID.
+
+        Asset pagination uses the `more` cursor; folders are not paged by it.'
+      parameters:
+      - $ref: '#/components/parameters/size'
+      - $ref: '#/components/parameters/more'
+      - $ref: '#/components/parameters/filters'
+      - $ref: '#/components/parameters/timeZone'
+      - $ref: '#/components/parameters/dataLocale'
+      - $ref: '#/components/parameters/uiLocale'
+      - name: folderId
+        in: path
+        required: true
+        description: '@description Folder identifier. Pass `root` to start at the connected provider''s
+          root folder, then traverse by the `id` of each subfolder.'
+        schema:
+          type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/GetFolderResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      security:
+      - cihubAccessToken: []
+        damToken: []
+  /assets/asset/{assetId}:
+    get:
+      operationId: getAssetSdk
+      summary: Get asset
+      description: Retrieves an asset by its ID. This is not a download. The `downloadUrl` of the asset
+        should be used to download the asset.
+      parameters:
+      - name: assetId
+        in: path
+        required: true
+        description: '@description Asset identifier.'
+        schema:
+          type: string
+      responses:
+        '200':
+          description: '@description Asset retrieved successfully.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Asset'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+      security:
+      - cihubAccessToken: []
+        damToken: []
+  /assets/assetversions/{assetId}:
+    get:
+      operationId: getAssetVersionsSdk
+      summary: Get asset versions
+      description: 'Retrieves the version history for an asset. Providers without versioning answer
+
+        501, 404, or 400 depending on the integration. Treat any of them as "not
+
+        supported here".'
+      parameters:
+      - name: withMaster
+        in: query
+        description: '@description Include the master version in the result.'
+        schema:
+          type: boolean
+      - name: assetId
+        in: path
+        required: true
+        description: '@description Asset identifier.'
+        schema:
+          type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/GetAssetVersionsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+      security:
+      - cihubAccessToken: []
+        damToken: []
+components:
+  securitySchemes:
+    cihubAccessToken:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: 'CI HUB access token returned by `POST /auth/exchangeToken`, sent as `Authorization:
+        Bearer <access_token>`. HS256, 1 hour lifetime. Required on every call after the exchange. On
+        `POST /auth/exchangeToken` itself this header instead carries the partner-signed RS256 JWT.'
+    damToken:
+      type: apiKey
+      in: header
+      name: provider-authorization
+      description: 'DAM connection token obtained from the provider login flow, sent as `provider-authorization:
+        Bearer <DAM connection token>`. Required on calls that reach a specific DAM (folder browse, search,
+        asset detail, versions, download, thumbnail). On `GET /auth/refreshToken` this header carries
+        the CI HUB refresh token instead.'
+  schemas:
+    StructuredError:
+      type: object
+      properties:
+        code:
+          type: string
+          description: 'Machine-readable error code. Format: `{source}-{error-type}` in kebab-case.
+
+            Clients can switch on this field to handle specific error types.'
+          examples:
+          - integration-forbidden
+          - integration-auth-failed
+          - cihub-access-token-invalid
+          - cihub-license-required
+          - cihub-unknown-error
+        source:
+          type: string
+          enum:
+          - cihub
+          - integration
+          description: 'Where the error originated. `integration` means the DAM/provider caused the problem.
+
+            `cihub` means the CI-HUB platform itself caused the problem.'
+        status:
+          type: number
+          description: HTTP status code mirrored in the response body for convenience.
+          examples:
+          - 400
+          - 401
+          - 403
+          - 404
+          - 409
+          - 501
+        message:
+          type: string
+          description: Human-readable error message safe to display to end users.
+          examples:
+          - Access denied by the integration
+          - Authentication token has expired
+        details:
+          anyOf:
+          - type: string
+          - type: object
+          description: 'Raw error detail from the provider or additional context. Optional.
+
+            Can be a simple string or a structured object with machine-readable context.
+
+            For integration errors this is typically the original DAM error forwarded as-is.'
+        provider:
+          type: string
+          description: 'Name of the integration/provider. Only present when `source` is `integration`.
+
+            Injected automatically by the server from the authenticated session.'
+          examples:
+          - bynder
+          - dropbox
+          - sharepoint
+      required:
+      - code
+      - source
+      - status
+      - message
+      description: 'Structured error object that provides machine-readable error classification.
+
+        Declared directly by migrated routes and adapters that use the error builder pattern, and
+
+        synthesized at the response layer for legacy string/Error failures (best-effort `code`/`source`
+
+        from the HTTP status and authenticated provider). The `source` field distinguishes CI-HUB
+
+        platform errors from integration/provider errors, allowing clients to programmatically route
+
+        errors to the correct team.'
+    ErrorEnvelope:
+      type: object
+      properties:
+        message:
+          type: string
+          const: Error
+          description: Always "Error". For the human-readable message use `error.message` instead.
+        details:
+          type: string
+          description: Request context and error summary.
+          examples:
+          - 'POST /api/v1/auth/exchangeToken failed: SDK authentication token is invalid'
+        errorCode:
+          type: string
+          description: Legacy mirror of `error.code`. New clients should switch on `error.code`.
+          examples:
+          - cihub-sdk-token-invalid
+        error:
+          $ref: '#/components/schemas/StructuredError'
+      required:
+      - message
+      - error
+      description: 'Standard error envelope returned by migrated routes. The `error` object carries the
+
+        machine-readable classification. `message`, `details`, and `errorCode` are legacy
+
+        mirrors kept for backward compatibility; new clients should read `error` only.'
+    ProviderCapabilities:
+      type: object
+      properties:
+        category:
+          type: string
+          description: '@description The category of the provider (e.g., DAM, PIM, Cloud Filehosting)'
+        assetUploadLimitInMB:
+          type: number
+          description: '@description Maximum file size in MB for assets to be uploaded.'
+        directAccessHelper:
+          type: string
+          description: '@description A JavaScript function invoked to return an object with helper functions
+            for uploading/updating files directly to the provider without calling our api first.'
+        assetHashAlgorithm:
+          type: string
+          enum:
+          - Md5
+          - Sha1
+          - Sha256
+          - Sha256Split4MB
+          - Sha256First16MB
+          - Sha512
+          - FileAttributes
+          - Crc32
+          description: Name of the supported hashing algorithm for file contents.
+        assetSearch:
+          type: object
+          properties:
+            help:
+              type: object
+              additionalProperties:
+                type: string
+              description: A text describing the search syntax in multiple languages, keyed by language
+                code.
+              examples:
+              - en: Enter a search term and matching files will be displayed. Click on the i icon for
+                  help with advanced search options.
+                de: Geben Sie einen Suchbegriff ein und dazu passende Dateien werden angezeigt. Für Hilfe
+                  zu erweiterten Suchoptionen auf das i Symbol klicken.
+            supportsParentId:
+              type: boolean
+              description: '@description If true, enables "searchInActiveFolder" for this provider.'
+            alwaysSearchInFolder:
+              type: boolean
+              description: '@description If true, forces the search operation to be scoped in the current
+                folder. This builds upon supportsParentId which should be set to true.'
+            similarSearch:
+              type: boolean
+              description: '@description If true, enables similarity search for this integration.'
+            externalUrl:
+              type: string
+              description: '@description A URL leading to an external website with further instructions
+                on the search syntax.'
+            autoSearchQuery:
+              type: string
+              description: '@description If set, triggers auto search with the specified query when the
+                user navigates to the search view.'
+            canParallelSearch:
+              type: boolean
+              description: If set to false, assets will be searched sequentially instead of in parallel.
+              default: true
+            supportsParallelRelink:
+              type: boolean
+              description: '@description If true, allows multiple concurrent relink operations to happen.'
+            parallelRelinkMax:
+              type: number
+              description: '@description Maximum number of parallel relinking operations allowed for this
+                integration.'
+            searchByHash:
+              type: string
+              description: '@description If set, the user can search assets via hash. The value of this
+                property should be the applied hash algorithm.'
+          required:
+          - canParallelSearch
+        description:
+          type: object
+          additionalProperties:
+            type: string
+          description: The provider's description text in multiple languages, keyed by language code.
+          examples:
+          - en: MediaGraph is a multi-user DAM system that offers permission-controlled access to many
+              media types.
+            de: MediaGraph ist ein Multi-User-DAM-System, das einen berechtigungsgesteuerten Zugriff auf
+              viele Medientypen bietet.
+        directAssetUpload:
+          type: boolean
+          description: If true, the client attempts to upload assets directly to the provider using the
+            uploadUrl of the target folder(the uploadUrl of the target folder is a legacy field though
+            and not send anymore) and directAccessHelper if provided in the capabilities.
+          deprecated: true
+        uploadWithRelinkOptionEnabled:
+          type: boolean
+          description: '@description If true, the "with relink" option will be available for the upload
+            of a placed local file via the link panel. This automatically links the asset to the file
+            in the DAM after the upload.'
+        requestHeaders:
+          type: object
+          additionalProperties:
+            type: string
+          description: Additional headers to be added to every request the client makes to this provider
+            directly. When directly uploading or downloading assets/thumbnails for example.
+          examples:
+          - X-Custom-Header: Custom Value
+        assetComment:
+          type: boolean
+          description: '@description Describes whether the provider supports additional comments on assets.
+            If true, a text field for the comment is presented to the user, and the entered comment is
+            passed to createAsset().'
+        disableDuplicateCheck:
+          type: boolean
+          description: 'If true, it is possible to upload assets even if assets with the same
+
+            file name already exist in the target folder.'
+        restrictSameNameUpdatesOnly:
+          type: boolean
+          description: 'If true, the update of an asset is only possible if the selected file
+
+            used to update the existing asset and the existing asset have the exact
+
+            same filenames.'
+        tasking:
+          type: boolean
+          description: 'Set to true if this integration supports tasking. Expects the integration
+
+            to implement searchTasks(), getTask(), getTaskAssets(), addTaskComment(),
+
+            and updateCustomTaskState().'
+        maxMultipleAssetVersions:
+          type: number
+          description: '@description Determines how many assets can be batched in the POST /assets/assetversions
+            endpoint for the provider.'
+        inddAssetUploadAsPackage:
+          type: boolean
+          description: 'Enables a special feature in the Aprimo integration. It allows uploading
+
+            an InDesign project as an InDesign package. This ZIP contains the INDD-file
+
+            and all the assets linked to it.
+
+            Note: This is only used in the Aprimo adapter.'
+        alwaysRefreshFolders:
+          type: boolean
+          description: '@description If true, ignores cached data and refreshes when navigating through
+            folders.'
+        supportsLocalContentView:
+          type: boolean
+          description: '@description If true, the provider supports the local content view. Only used
+            in the siteFusion adapter.'
+        supportsBrandHub:
+          type: boolean
+          description: '@description If true, the provider supports the brand hub.'
+      description: '@description The capabilities of the provider.'
+    AssetCapabilities:
+      type: object
+      properties:
+        canDeleteAsset:
+          type: boolean
+          description: '@description Whether the asset can be deleted'
+        canUpdateAsset:
+          type: boolean
+          description: '@description Whether the asset can be updated'
+        canLockAsset:
+          type: boolean
+          description: '@description Whether the asset can be locked'
+        canUnlockAsset:
+          type: boolean
+          description: '@description Whether the asset can be unlocked'
+        canRenameAsset:
+          type: boolean
+          description: '@description Whether the asset can be renamed'
+        uploadExtensions:
+          type: array
+          items:
+            type: string
+          description: '@description The extensions that the asset can be updated with. Normally assets
+            can only be updated with the same extension as the original asset. When this is set, the asset
+            can be updated with the extensions in the array.'
+      required:
+      - canDeleteAsset
+      - canUpdateAsset
+      - canLockAsset
+      - canUnlockAsset
+      - canRenameAsset
+      description: '@description Asset capabilities. Used to determine if the user has permission to delete,
+        update, lock and unlock this asset.'
+    CustomMetadataField:
+      type: object
+      properties:
+        id:
+          type: string
+          description: '@description Metadata field identifier'
+        type:
+          type: string
+          enum:
+          - TEXT
+          - DRAFT_JS
+          - DATE
+          - DATETIME
+          - TIME
+          description: Type of the field. Can be used to format the value.
+        value:
+          type: string
+          description: '@description Field value'
+        name:
+          type: string
+          description: '@description Field name'
+        i18nName:
+          type: object
+          additionalProperties:
+            type: string
+          description: Object containing the field name for each supported locale for this field.
+          examples:
+          - en: Name
+            de: Name
+            fr: Nom
+    Asset:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique identifier for the asset
+          examples:
+          - asset_12345
+        name:
+          type: string
+          description: Display name of the asset
+          examples:
+          - product-photo.jpg
+        parentPath:
+          type: string
+          description: Path of the parent folder
+          examples:
+          - /Marketing/2024/Campaign
+        fileSize:
+          type: number
+          description: Size of the asset file in bytes
+          examples:
+          - 2048576
+        xSizePx:
+          type: number
+          description: Width of the image (if asset is an image)
+          examples:
+          - 1920
+        ySizePx:
+          type: number
+          description: Height of the image (if asset is an image)
+          examples:
+          - 1080
+        created:
+          type: number
+          description: Unix timestamp when the asset was created
+          examples:
+          - 1704067200000
+        modified:
+          type: number
+          description: Unix timestamp when the asset was last modified
+          examples:
+          - 1704153600000
+        mimeType:
+          type: string
+          description: MIME type of the asset
+          examples:
+          - image/jpeg
+        version:
+          type: number
+          description: Version number of the asset
+          examples:
+          - 1
+        versionComment:
+          type: string
+          description: Comment associated with this version
+          examples:
+          - Updated product shot with new background
+        downloadHashMd5:
+          type: string
+          description: MD5 hash of the asset. Only listed for providers that have provider.capabilities.assetHashAlgorithm
+            set to Md5 which can be found under /providers route. Only one of these download hashes is
+            returned, depending on the provider.capabilities.assetHashAlgorithm.
+          examples:
+          - a1b2c3d4e5f6...
+        downloadHashSha1:
+          type: string
+          description: SHA1 hash of the asset. Only listed for providers that have provider.capabilities.assetHashAlgorithm
+            set to Sha1 which can be found under /providers route. Only one of these download hashes is
+            returned, depending on the provider.capabilities.assetHashAlgorithm.
+          examples:
+          - a1b2c3d4e5f6...
+        downloadHashSha256Split4MB:
+          type: string
+          description: SHA256 hash of the asset split into 4MB chunks. Only listed for providers that
+            have provider.capabilities.assetHashAlgorithm set to Sha256Split4MB which can be found under
+            /providers route. Only one of these download hashes is returned, depending on the provider.capabilities.assetHashAlgorithm.
+          examples:
+          - a1b2c3d4e5f6...
+        downloadHashSha256First16MB:
+          type: string
+          description: SHA256 hash of the asset first 16MB. Only listed for providers that have provider.capabilities.assetHashAlgorithm
+            set to Sha256First16MB which can be found under /providers route. Only one of these download
+            hashes is returned, depending on the provider.capabilities.assetHashAlgorithm.
+          examples:
+          - a1b2c3d4e5f6...
+        downloadHashSha256:
+          type: string
+          description: SHA256 hash of the asset. Only listed for providers that have provider.capabilities.assetHashAlgorithm
+            set to Sha256 which can be found under /providers route. Only one of these download hashes
+            is returned, depending on the provider.capabilities.assetHashAlgorithm.
+          examples:
+          - a1b2c3d4e5f6...
+        downloadHashSha512:
+          type: string
+          description: SHA512 hash of the asset. Only listed for providers that have provider.capabilities.assetHashAlgorithm
+            set to Sha512 which can be found under /providers route. Only one of these download hashes
+            is returned, depending on the provider.capabilities.assetHashAlgorithm.
+          examples:
+          - a1b2c3d4e5f6...
+        downloadHashFileAttributes:
+          type: string
+          description: File attributes hash of the asset calculated from the file attributes. Only listed
+            for providers that have provider.capabilities.assetHashAlgorithm set to FileAttributes which
+            can be found under /providers route. Only one of these download hashes is returned, depending
+            on the provider.capabilities.assetHashAlgorithm.
+          examples:
+          - a1b2c3d4e5f6...
+        downloadHashCrc32:
+          type: string
+          description: CRC32 hash of the asset. Only listed for providers that have provider.capabilities.assetHashAlgorithm
+            set to Crc32 which can be found under /providers route. Only one of these download hashes
+            is returned, depending on the provider.capabilities.assetHashAlgorithm.
+          examples:
+          - 1a2b3c4d
+        thumbnailUrl:
+          type: string
+          description: URL to access the asset thumbnail. Contains placeholders that need to be resolved.
+            Read more on this in the resolve download/thumbnail URLs section of the documentation.
+          examples:
+          - https://api.example.com/assets/123/thumbnail
+        downloadUrl:
+          type: string
+          description: URL to download the asset. Contains placeholders that need to be resolved. Read
+            more on this in the resolve download/thumbnail URLs section of the documentation.
+          examples:
+          - https://api.example.com/assets/123/download
+        assetDetailsExternalUrl:
+          type: string
+          description: External URL for asset details. This usually opens the asset in the external system.
+          examples:
+          - https://external-system.com/assets/123
+        lockedBy:
+          type: string
+          description: User ID who has locked the asset. Required to be set when the asset is locked.
+          examples:
+          - user_456
+        capabilities:
+          $ref: '#/components/schemas/AssetCapabilities'
+        type:
+          type: string
+          description: '@description Type of the asset. This list is not complete.'
+        conversions:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                description: Unique identifier for the conversion
+                examples:
+                - conv_thumb
+              name:
+                type: string
+                description: Display name of the conversion
+                examples:
+                - Thumbnail
+              url:
+                type: string
+                description: URL to access the converted asset. Contains placeholders that need to be
+                  resolved. Read more on this in the resolve download/thumbnail URLs section of the documentation.
+                examples:
+                - https://api.example.com/assets/123/conversions/thumb
+              extension:
+                type: string
+                description: File extension of the converted asset
+                examples:
+                - jpg
+              disabled:
+                type: boolean
+                description: Whether this conversion is disabled
+                examples:
+                - false
+              description:
+                type: string
+                description: Description of the conversion
+                examples:
+                - Small thumbnail for preview
+          description: '@description Available conversion formats for the asset'
+        displayVersion:
+          type: number
+          description: This can tell the client to display the version number to the user instead of the
+            internal version number.
+          examples:
+          - 2
+        title:
+          type: string
+          description: Title of the asset
+          examples:
+          - Product Photography - Summer Collection
+        caption:
+          type: string
+          description: Caption or description of the asset
+          examples:
+          - Professional product shot showcasing the new summer collection
+        copyright:
+          type: string
+          description: Copyright information for the asset
+          examples:
+          - © 2024 Company Name. All rights reserved.
+        termsOfUse:
+          type: string
+          description: Terms of use for the asset
+          examples:
+          - For internal marketing use only
+        instructions:
+          type: string
+          description: Usage instructions for the asset
+          examples:
+          - Use with proper attribution and company branding
+        colorSpace:
+          type: string
+          description: Color space of the asset
+          examples:
+          - sRGB
+        releasedBy:
+          type: string
+          description: User who released the asset
+          examples:
+          - designer@company.com
+        releasedDate:
+          type: number
+          description: Timestamp when the asset was released.
+          examples:
+          - 1757449091674
+        released:
+          type: string
+          description: Release status of the asset
+          examples:
+          - approved
+        keywords:
+          type: array
+          items:
+            type: string
+          description: Keywords associated with the asset
+          examples:
+          - - product
+            - summer
+            - collection
+            - photography
+        categories:
+          type: array
+          items:
+            type: string
+          description: Categories the asset belongs to
+          examples:
+          - - marketing
+            - product
+            - seasonal
+        states:
+          type: array
+          items:
+            type: string
+          description: Current states of the asset
+          examples:
+          - - approved
+            - published
+            - featured
+        exif:
+          type: object
+          properties:
+            cameraModel:
+              type: string
+              description: Description of the camera model
+              examples:
+              - Canon EOS R5
+            orientation:
+              type: string
+              description: Orientation of the image ('horizontal' or 'vertical')
+              examples:
+              - vertical
+            exposureTime:
+              type: number
+              description: Exposure time, given in seconds
+              examples:
+              - 12
+            apertureValue:
+              type: string
+              description: The lens aperture
+              examples:
+              - f/2.8
+            isoSpeedRatings:
+              type: string
+              description: '@description Indicates the ISO Speed and ISO Latitude of the camera or input
+                device as specified in ISO 12232'
+            width:
+              type: number
+              description: Width of the image (in pixels)
+              examples:
+              - 1920
+            height:
+              type: number
+              description: Height of the image (in pixels)
+              examples:
+              - 1080
+            resolution:
+              type: string
+              description: '@description Resolution of the image file'
+            dateTimeOriginal:
+              type: number
+              description: The date and time when the original image data was generated.
+              examples:
+              - 1714857600000
+          description: '@description EXIF metadata from the asset'
+        iptc:
+          type: object
+          properties:
+            headline:
+              type: string
+              description: Headline of the object
+              examples:
+              - Summer Collection Launch
+            caption:
+              type: string
+              description: Caption/description for the object
+              examples:
+              - Professional product photography for the new summer collection
+            captionWriter:
+              type: string
+              description: Description of the author
+              examples:
+              - Cool Photographer
+            instructions:
+              type: string
+              description: Instructions for the object
+              examples:
+              - For editorial use only
+            copyrightNotice:
+              type: string
+              description: Copyright holder
+              examples:
+              - © 2024 Company Name
+            credit:
+              type: string
+              description: Provider of the object
+              examples:
+              - John Doe Photography
+            city:
+              type: string
+              description: City of origin of the object
+              examples:
+              - New York
+            provinceState:
+              type: string
+              description: State of origin of the object
+              examples:
+              - NY
+            countryName:
+              type: string
+              description: Country of origin of the object
+              examples:
+              - United States
+          description: '@description IPTC metadata from the asset'
+        xmp:
+          type: object
+          properties:
+            headline:
+              type: string
+              description: Headline of the object
+              examples:
+              - Summer Collection Launch
+            credit:
+              type: string
+              description: Provider of the object
+              examples:
+              - John Doe Photography
+            city:
+              type: string
+              description: City of origin of the object
+              examples:
+              - New York
+            provinceState:
+              type: string
+              description: State of origin of the object
+              examples:
+              - NY
+            countryName:
+              type: string
+              description: Country of origin of the object
+              examples:
+              - United States
+            originalDocumentId:
+              type: string
+              description: '@description A reference to the original document from which this one is derived.'
+            documentId:
+              type: string
+              description: '@description The common identifier for all versions and renditions of a document.'
+            instanceId:
+              type: string
+              description: '@description Identifier for specific incarnation of document, updated each
+                time a file is saved.'
+            iccProfileDescription:
+              type: string
+              description: '@description ICC color profile'
+          description: '@description XMP metadata from the asset'
+        values:
+          type: array
+          items:
+            $ref: '#/components/schemas/CustomMetadataField'
+          description: '@description Custom metadata fields for the asset'
+        relatedFolderId:
+          type: string
+          description: ID of the related folder. Sometimes an asset is a complex object, meaning we handle
+            it as an asset as well as a folder. A folder meaning, it can have assets inside it, but also
+            we can display it as an asset. This is the Id to display this complex object as a folder.
+          examples:
+          - folder_123
+        masterId:
+          type: string
+          description: The master ID of the asset that this version belongs to. Only when this asset is
+            a version.
+          examples:
+          - 123
+      required:
+      - id
+      - name
+      - fileSize
+      - xSizePx
+      - ySizePx
+      - created
+      - modified
+      - mimeType
+      - version
+      - thumbnailUrl
+      - downloadUrl
+      - assetDetailsExternalUrl
+      - capabilities
+      - type
+      - conversions
+      description: '@description Asset object.'
+    Folder:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique identifier for the folder
+          examples:
+          - folder_12345
+        name:
+          type: string
+          description: Display name of the folder
+          examples:
+          - Summer Campaign 2024
+        relatedAssetId:
+          type: string
+          description: ID of the related asset. Sometimes an asset is a complex object, meaning we handle
+            it as an asset as well as a folder. A folder meaning, it can have assets inside it, but also
+            we can display it as an asset. This is the Id to display this complex object as an asset.
+          examples:
+          - asset_123
+      required:
+      - id
+      - name
+      description: '@description Raw Folder object.'
+    AssetNavigationFilter:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique identifier for the filter
+          examples:
+          - file_type
+        name:
+          type: string
+          description: Display name of the filter
+          examples:
+          - File Type
+        options:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                description: Unique identifier for the filter option
+                examples:
+                - fileType:jpg
+              isActive:
+                type: boolean
+                description: Whether this filter option is currently active
+                examples:
+                - false
+              name:
+                type: string
+                description: Display name of the filter option
+                examples:
+                - JPG Images
+              count:
+                type: number
+                description: Number of assets matching this filter option
+                examples:
+                - 45
+            required:
+            - id
+            - isActive
+            - name
+      required:
+      - id
+      - name
+      - options
+    FolderCapabilities:
+      type: object
+      properties:
+        canDeleteFolder:
+          type: boolean
+          description: Whether the user has permission to delete this folder
+          examples:
+          - true
+        canAddFolder:
+          type: boolean
+          description: Whether the user has permission to create subfolders within this folder
+          examples:
+          - true
+        canAddAsset:
+          type: boolean
+          description: Whether the user has permission to upload assets to this folder
+          examples:
+          - true
+        canRenameFolder:
+          type: boolean
+          description: Whether the user has permission to rename this folder
+          examples:
+          - true
+      description: '@description Folder capabilities. Used to determine if the user has permission to
+        delete, create subfolders and upload assets to this folder.'
+  responses:
+    ProviderInfoResponse:
+      description: '@description Provider-specific information, capabilities, and configuration that is
+        available after logging in to the provider.'
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              remoteSystemPrefix:
+                type: string
+                description: The URL to the remote system, usually the hostname of the API endpoint. Absent
+                  for providers without runtime details, which return an empty object.
+                examples:
+                - api.box.com
+              nativeFolderOrder:
+                type: boolean
+                description: If true, the folders will be listed in the order they are delivered in by
+                  the provider API. If false, the folders are listed alphabetically.
+                examples:
+                - true
+              dataLocales:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                      description: Locale identifier.
+                      examples:
+                      - en-GB
+                    name:
+                      type: string
+                      description: Short locale name.
+                      examples:
+                      - en-GB
+                    displayName:
+                      type: string
+                      description: Full human-readable locale name
+                      examples:
+                      - English (United Kingdom)
+                    default:
+                      type: boolean
+                      description: Whether this is the default locale.
+                      examples:
+                      - true
+                description: '@description List of languages certain data of the provider is available
+                  in.'
+              customMetadata:
+                type: object
+                properties:
+                  groups:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          description: Unique identifier for the group
+                          examples:
+                          - custom
+                        name:
+                          type: string
+                          description: Default display name for the group
+                          examples:
+                          - Custom Metadata
+                        i18nName:
+                          type: object
+                          additionalProperties:
+                            type: string
+                          description: Localized names for the group in different languages
+                          examples:
+                          - en: Custom Metadata
+                            de: Benutzerdefinierte Metadaten
+                    description: '@description Custom metadata field groups.'
+                  fields:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          description: Unique identifier for the field
+                          examples:
+                          - custom#123
+                        name:
+                          type: string
+                          description: Default display name for the field
+                          examples:
+                          - Asset Category
+                        groupId:
+                          type: string
+                          description: ID of the group this field belongs to
+                          examples:
+                          - custom
+                        i18nName:
+                          type: object
+                          additionalProperties:
+                            type: string
+                          description: Localized names for the field in different languages
+                          examples:
+                          - en: Asset Category
+                            de: Asset-Kategorie
+                            fr: Catégorie d'actif
+                    description: '@description Available custom metadata fields.'
+                description: '@description Provider-specific metadata configuration'
+              filters:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                      description: '@description Filter identifier'
+                    name:
+                      type: string
+                      description: '@description Filter display name'
+                    i18nName:
+                      type: object
+                      additionalProperties:
+                        type: string
+                      description: Object containing the filter name for each supported locale for this
+                        filter.
+                      examples:
+                      - en: Name
+                        de: Name
+                        fr: Nom
+                    options:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                          name:
+                            type: string
+                          default:
+                            type: boolean
+                          isDisabled:
+                            type: boolean
+                          isActive:
+                            type: boolean
+                          i18nName:
+                            type: object
+                            additionalProperties:
+                              type: string
+                            description: Object containing the filter option name for each supported locale
+                              for this filter option.
+                            examples:
+                            - en: Name
+                              de: Name
+                              fr: Nom
+                        additionalProperties:
+                          type: string
+                      description: '@description Available filter options'
+                    showInSimilarSearch:
+                      type: boolean
+                      description: '@description Whether filter appears in similar search'
+                  additionalProperties: {}
+                description: '@description Those are the pre-search filters that can be selected before
+                  the search is triggered.'
+              createAssetOptions:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                      description: '@description Option identifier'
+                    name:
+                      type: string
+                      description: '@description Option display name'
+                    type:
+                      type: string
+                      description: Input type. This list is not complete.
+                      examples:
+                      - select
+                    required:
+                      type: boolean
+                      description: Whether this option is required
+                      examples:
+                      - false
+                    options:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                          name:
+                            type: string
+                      description: '@description Available choices for this option'
+                description: '@description Options for asset creation'
+              updateAssetOptions:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                      description: '@description Option identifier'
+                    name:
+                      type: string
+                      description: '@description Option display name'
+                    type:
+                      type: string
+                      description: Input type. This list is not complete.
+                      examples:
+                      - select
+                    required:
+                      type: boolean
+                      description: '@description Whether this option is required'
+                    options:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                          name:
+                            type: string
+                      description: '@description Available choices for this option'
+                description: '@description Options for asset updating'
+              requestHeaders:
+                type: object
+                additionalProperties: {}
+                description: Additional HTTP headers required for uploading or downloading assets or thumbnails.
+                  Request headers are normally sent in the provider capabilities. There are edge cases
+                  where the request headers are only available after the login, this is where they are
+                  added to the provider info.
+                examples:
+                - x-api-key: api-key-value
+              searchConfigs:
+                type: object
+                properties:
+                  searchQueryRequired:
+                    type: boolean
+                    description: Whether a search query is required or not. If true, the user must enter
+                      a search query before a search can be triggered.
+                    examples:
+                    - false
+                  configs:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          description: Unique identifier for the configuration option
+                          examples:
+                          - single:searchMode
+                        name:
+                          type: string
+                          description: Display name for the configuration option
+                          examples:
+                          - Search Mode
+                        i18nName:
+                          type: object
+                          additionalProperties:
+                            type: string
+                          description: Object containing the display name for each supported locale for
+                            this configuration option.
+                          examples:
+                          - en: Search Mode
+                            de: Suchmodus
+                            fr: Mode de recherche
+                        type:
+                          type: string
+                          description: Type of configuration option. This list is not complete.
+                          examples:
+                          - select
+                        options:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              id:
+                                type: string
+                                description: Option identifier
+                                examples:
+                                - all
+                              name:
+                                type: string
+                                description: Display name for the option
+                                examples:
+                                - All
+                              isActive:
+                                type: boolean
+                                description: Whether this option is currently active/selected
+                                examples:
+                                - false
+                          description: '@description Available options for this configuration.'
+                    description: '@description Array of search configurations.'
+                description: '@description Search configuration options. On every search you should send
+                  the active options ids in the filters fields.'
+              transformation:
+                type: object
+                properties:
+                  availableTransformationsUrl:
+                    type: string
+                    description: URL to get available transformations.
+                    examples:
+                    - https://api.example.com/get-available-transformations
+                  actionUrl:
+                    type: string
+                    description: URL to perform a transformation.
+                    examples:
+                    - https://api.example.com/do-transformation
+                description: '@description Transformation configuration.'
+              rightsManagement:
+                type: object
+                properties:
+                  addExternalAsset:
+                    type: object
+                    properties:
+                      actionUrl:
+                        type: string
+                        description: URL endpoint for adding external assets
+                        examples:
+                        - https://api.provider.com/addExternalAsset
+                    description: '@description Configuration for adding external assets'
+                  checkExternalAssets:
+                    type: object
+                    properties:
+                      actionUrl:
+                        type: string
+                        description: URL endpoint for checking external assets
+                        examples:
+                        - https://api.provider.com/checkExternalAssets
+                    description: '@description Configuration for checking external assets'
+                  checkClearance:
+                    type: object
+                    properties:
+                      actionUrl:
+                        type: string
+                        description: URL endpoint for checking clearance
+                        examples:
+                        - https://api.provider.com/checkClearance
+                      filters:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            type:
+                              type: string
+                              description: Type of filter control. This list is not complete.
+                              examples:
+                              - date
+                            id:
+                              type: string
+                              description: Filter identifier
+                              examples:
+                              - inDate
+                            name:
+                              type: string
+                              description: Filter display name
+                              examples:
+                              - In Date
+                            options:
+                              type: array
+                              items:
+                                type: object
+                                properties:
+                                  id:
+                                    type: string
+                                    description: '@description Option identifier'
+                                  name:
+                                    type: string
+                                    description: '@description Option display name'
+                                  path:
+                                    type: array
+                                    items:
+                                      type: string
+                                    description: '@description Hierarchical path for nested options'
+                              description: '@description Available filter options (only for multiselect
+                                type)'
+                        description: '@description Available filters for clearance checking'
+                    description: '@description Configuration for checking clearance rights'
+                description: '@description Rights management configuration for the provider'
+              assetSearchHelpUrl:
+                type: string
+                description: URL for further information on asset search, e.g. in Asset Bank a link to
+                  view the last search.
+                format: uri
+                examples:
+                - https://help.example.com/asset-search
+    BadRequest:
+      description: '| Code | When |
+
+        |---|---|
+
+        | `cihub-bad-request` | A required parameter is missing or invalid. |
+
+        | `cihub-internal-error` | The license check failed transiently. Legacy paths answer this with
+        400 for wire compatibility; it is retryable despite the 4xx status. |
+
+        | `integration-operation-failed` | The DAM rejected the operation, or the adapter does not implement
+        it. `provider` names the integration. |'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    InternalServerError:
+      description: '| Code | When |
+
+        |---|---|
+
+        | `cihub-internal-error` | Transient CI HUB failure. Safe to retry. |'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    SearchAssetsResponse:
+      description: '@description Assets found'
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              assets:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Asset'
+                description: '@description List of assets matching the search criteria'
+              folders:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Folder'
+                description: '@description Only returned for complex objects that are displayed also as
+                  folders.'
+              filters:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AssetNavigationFilter'
+                description: '@description Available filters.'
+              more:
+                type: string
+                description: Pagination cursor for next page of assets. This needs to be set in the `more`
+                  parameter of the next request if you want to get the next page.
+                examples:
+                - next_page_token
+              capabilities:
+                type: object
+                properties:
+                  canAddAsset:
+                    type: boolean
+                    description: Whether the user has permission to upload assets in the search context
+                    examples:
+                    - true
+                description: '@description Used to flag if the user has permission to upload assets in
+                  the search view.'
+              totalAssetsCount:
+                type: number
+                description: Total number of assets matching the search criteria.
+                examples:
+                - 150
+            required:
+            - assets
+            - folders
+            - filters
+            - more
+            - totalAssetsCount
+    Unauthorized:
+      description: '| Code | When |
+
+        |---|---|
+
+        | `cihub-access-token-missing` | No `Authorization` header. |
+
+        | `cihub-access-token-invalid` | CI HUB token signature failed, expired, or the user record was
+        removed. |
+
+        | `integration-auth-failed` | The DAM connection token expired, was invalid, or its refresh failed.
+        Renew the DAM connection. `provider` names the integration. |'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Forbidden:
+      description: '| Code | When |
+
+        |---|---|
+
+        | `provider-access-token-missing` | No `provider-authorization` header. Complete a DAM login first.
+        |
+
+        | `provider-access-token-invalid` | The `provider-authorization` token failed verification or
+        expired. Start a new DAM login. |
+
+        | `integration-forbidden` | The DAM denied access (permissions, roles). `provider` names the integration.
+        |'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    NotFound:
+      description: '| Code | When |
+
+        |---|---|
+
+        | `integration-not-found` | The asset, folder, or version does not exist in the DAM, or the DAM
+        does not support this lookup. `provider` names the integration. |
+
+
+        Some legacy paths answer 404 with an empty or plain-text body instead of the
+
+        envelope. Treat any 404 as not-found regardless of body shape.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    NotImplemented:
+      description: '| Code | When |
+
+        |---|---|
+
+        | `integration-not-implemented` | The adapter has not implemented this operation yet. |
+
+        | `integration-not-supported` | The DAM has no equivalent feature. |
+
+
+        `provider` names the integration in both cases.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    GetFolderResponse:
+      description: '@description Folder contents retrieved successfully'
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              id:
+                type: string
+                description: Unique identifier for the folder
+                examples:
+                - folder_12345
+              name:
+                type: string
+                description: Display name of the folder
+                examples:
+                - Marketing Assets 2024
+              more:
+                type: string
+                description: Pagination cursor for next page of assets. This needs to be set in the `more`
+                  parameter of the next request if you want to get the next page.
+                examples:
+                - next_page_token
+              capabilities:
+                $ref: '#/components/schemas/FolderCapabilities'
+              folders:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Folder'
+                description: '@description Array of subfolders within this folder'
+              assets:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Asset'
+                description: '@description Array of assets within this folder'
+              filters:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AssetNavigationFilter'
+                description: '@description Available filters.'
+              totalAssetsCount:
+                type: number
+                description: Total number of assets in this folder.
+                examples:
+                - 150
+            required:
+            - id
+            - more
+            - capabilities
+            - folders
+            - assets
+            - totalAssetsCount
+    GetAssetVersionsResponse:
+      description: '@description Version history for the asset.'
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              id:
+                type: string
+                description: '@description Asset identifier'
+              name:
+                type: string
+                description: '@description Asset name'
+              versions:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Asset'
+                description: '@description Array of asset versions'
+            required:
+            - id
+            - name
+            - versions
+  parameters:
+    size:
+      name: size
+      in: query
+      schema:
+        type: string
+      description: Number of assets to return per page. The maximum value is also specified by the provider
+        in the server configuration. The smaller of the two values will be used.
+      examples:
+        example1:
+          value: 50
+    more:
+      name: more
+      in: query
+      schema:
+        type: string
+      description: Token for continuing a previous request on the next page. Should be set to the value
+        of `more` as received by the previous call to this endpoint.
+      examples:
+        example1:
+          value: next_page_token
+    filters:
+      name: filters
+      in: query
+      schema:
+        type: array
+        items:
+          type: string
+      description: List of filters to apply to the search. An array of option ids is expected here. You
+        can optain them in the response of the previous call to this endpoint inside each filter in the
+        `filters` property.
+      examples:
+        example1:
+          value:
+          - file_type:jpg
+          - category:marketing
+    timeZone:
+      name: timeZone
+      in: query
+      schema:
+        type: string
+      description: 'Only used for AdmiralCloud and Asana.
+
+        Timezone for date/time formatting. It expects a valid timezone based on the Intl.DateTimeFormat
+        library.
+
+        Use Intl.DateTimeFormat().resolvedOptions().timeZone to get the timezone of the user.
+
+        See https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/DateTimeFormat/resolvedOptions#timezone
+        for more information.'
+      examples:
+        example1:
+          value: Africa/Tunis
+    dataLocale:
+      name: dataLocale
+      in: query
+      schema:
+        type: string
+      description: If the provider supports data localization, this is the locale for the content of the
+        data (e.g., values of metadata fields). You can find the supported data locales of the provider
+        in the response of the /system/providerInfo route. Send the id of the locale here.
+      examples:
+        example1:
+          value: de-DE
+    uiLocale:
+      name: uiLocale
+      in: query
+      schema:
+        type: string
+        enum:
+        - en
+        - de
+        - fr
+        - es
+        - ja
+        - zh
+      description: Locale for user interface elements. For example, labels of metadata fields. Only the
+        locales in the enum are supported. When omitted, providers fall back to `en`.
+      examples:
+        example1:
+          value: en
+  requestBodies:
+    requestBody:
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              dataBase64:
+                type: string
+                description: Either Base64 encoded image data or an HTTP/HTTPS URL to the image.
+                examples:
+                - data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAOEAA...
+            required:
+            - dataBase64
+x-provenance:
+  method: derived
+  derived_by: API Evangelist enrichment pipeline
+  derived_on: '2026-08-12'
+  statement: 'CI HUB does not serve its OpenAPI document at a public URL. It does publish the document''s
+    complete machine-readable projection: `@ci-hub/access-sdk` ships `dist/index.d.ts`, generated by `openapi-typescript`
+    from the same OpenAPI specification that renders developer.ci-hub.com/access (''All request and response
+    types are generated from the same OpenAPI specification that produces this reference''). This document
+    is that projection walked back into OpenAPI 3.1. It is a derivation of a first-party artifact, not
+    an authored specification.'
+  sources:
+  - what: paths, operationIds, summaries, descriptions, parameters, request bodies, responses, components.schemas
+      / responses / parameters / requestBodies
+    from: npm @ci-hub/access-sdk@0.2.0 -> package/dist/index.d.ts (openapi-typescript emission, Apache-2.0)
+    url: https://registry.npmjs.org/@ci-hub/access-sdk/-/access-sdk-0.2.0.tgz
+    method: derived
+  - what: info.title, info.description, info.termsOfService, externalDocs, servers[]
+    from: CI HUB Access SDK documentation (openapi-typescript does not emit info/servers)
+    url: https://developer.ci-hub.com/access/llms-full.txt
+    method: searched
+  - what: components.securitySchemes and the security requirements applied per operation
+    from: 'the documented two-token pattern (Authorization: Bearer <CI HUB access token> plus provider-authorization:
+      Bearer <DAM connection token>); openapi-typescript does not emit securitySchemes, so this restores
+      information the projection drops rather than adding a new claim'
+    url: https://developer.ci-hub.com/access/authentication
+    method: searched
+  not_derived:
+  - operation tags (the projection carries none; grouping is recorded in overlays/ci-hub-access-overlay.yaml
+    instead of being written into this document)
+  - in-spec examples beyond the @example values openapi-typescript preserved
+  verification:
+  - url: https://live.ci-hub.com/api/v1/auth/providers
+    http_status: 200
+    note: GET /auth/providers answers anonymously and returns the live provider catalogue, confirming
+      the derived path and method.
+  - url: https://live.ci-hub.com/api/v1/system/providerInfo
+    http_status: 401
+    note: 'returns the derived ErrorEnvelope shape verbatim: {message, details, errorCode, error:{code,
+      source, status, message, details}}.'

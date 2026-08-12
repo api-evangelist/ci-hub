@@ -1,0 +1,146 @@
+generated: '2026-08-12'
+method: searched
+source: https://ci-hub.com/pricing
+note: >-
+  CI HUB publishes real per-seat list prices for its END-USER products — the connector plugins, CI
+  HUB Drive and Brand Connector — in both EUR and USD, which is more transparency than most of
+  this category offers. It publishes NOTHING for the developer surface. There is no price, tier or
+  metering unit anywhere for the Access SDK, the Integration SDK or the MCP server; the Access SDK
+  docs say only that "commercial terms are agreed during onboarding", and the API enforces that
+  with a dedicated 402 cihub-sdk-no-subscription. So a developer evaluating this API cannot find
+  out what it costs without talking to a partner manager. Both facts are recorded: the published
+  product plans below, and the absent developer pricing.
+currency:
+- EUR
+- USD
+billing_period: monthly
+billing_commitment: 12 month upfront payment — the listed monthly prices are quoted on that basis
+tax: Listed prices exclude VAT; taxes may be added based on location and billing requirements.
+license_terms: License is valid for one person on up to 3 computers.
+free_trial:
+  available: true
+  url: https://ci-hub.com/start-free-trial
+  duration_published: false
+plans:
+- name: CI HUB Brand Connector
+  price: 600
+  currency: EUR
+  price_usd: 800
+  period: month
+  includes:
+  - All updates
+  - 12 month support
+  purchase: See pricing plans
+  category: product
+- name: CI HUB Drive
+  price: 7.0
+  currency: EUR
+  price_usd: 11.0
+  period: month
+  includes:
+  - All updates
+  - 12 month support
+  promotion: FREE for 12 months, restrictions apply
+  category: product
+- name: Connector for Adobe Creative Cloud
+  price: 19
+  currency: EUR
+  price_usd: 22.0
+  period: month
+  purchase: Contact Sales Team
+  category: connector
+- name: Connector for Adobe Express
+  price: 7.99
+  currency: EUR
+  price_usd: 9.0
+  period: month
+  purchase: Contact Sales Team
+  category: connector
+- name: PowerPoint Connector PRO
+  price: 7.99
+  currency: EUR
+  price_usd: 9.0
+  period: month
+  purchase: Contact Sales Team
+  category: connector
+- name: Connector for Google Workspace
+  price: 9.5
+  currency: EUR
+  price_usd: 11.0
+  period: month
+  purchase: Contact Sales Team
+  category: connector
+- name: Connector for Sketch
+  price: 7.99
+  currency: EUR
+  price_usd: 9.0
+  period: month
+  purchase: Contact Sales Team
+  category: connector
+- name: Connector for Figma
+  price: 7.99
+  currency: EUR
+  price_usd: 9.0
+  period: month
+  purchase: Contact Sales Team
+  category: connector
+- name: Connector for WordPress
+  price: 14.5
+  currency: EUR
+  price_usd: 17.0
+  period: month
+  purchase: Contact Sales Team
+  category: connector
+- name: Connector for SharePoint
+  price: 7.99
+  currency: EUR
+  price_usd: 9.0
+  period: month
+  purchase: Contact Sales Team
+  category: connector
+- name: Connector for Salesforce
+  price: 25
+  currency: EUR
+  price_usd: 35.0
+  period: month
+  purchase: Contact Sales Team
+  category: connector
+- name: Connector for Canva
+  price: 7.99
+  currency: EUR
+  price_usd: 9.0
+  period: month
+  purchase: Contact Sales Team
+  category: connector
+developer_surface_pricing:
+  access_sdk:
+    published: false
+    gate: >-
+      An SDK subscription is required and is agreed during onboarding. The API returns 402
+      cihub-sdk-no-subscription when a partner company has no active subscription, and 402
+      cihub-license-required when the individual user has no seat.
+    metering_unit_published: false
+  integration_sdk:
+    published: false
+    note: >-
+      The vendor side. Integrations are submitted for review through integration-cli submit; no
+      fee or revenue-share terms are published.
+  mcp_server:
+    published: false
+    note: >-
+      Marketed as the Bright AI Connector with a free-trial CTA and no price on the product page.
+summary:
+  plan_count: 12
+  published_developer_plans: 0
+  free_tier: false
+  free_trial: true
+  self_serve_developer_signup: false
+x-evidence:
+  fetched: '2026-08-12'
+  checks:
+  - url: https://ci-hub.com/pricing
+    http_status: 200
+  - url: https://developer.ci-hub.com/access/getting-started
+    http_status: 200
+  - url: https://ci-hub.com/ai/mcp-server
+    http_status: 200

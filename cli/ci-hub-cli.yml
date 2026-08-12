@@ -1,0 +1,158 @@
+generated: '2026-08-12'
+method: searched
+source: https://developer.ci-hub.com/integration/reference/cli
+applies_to: ci-hub:integration-sdk
+name: integration-cli
+note: >-
+  A build-and-submit CLI, not an API client. It belongs to the Integration SDK — the vendor-facing
+  side of CI HUB, where a DAM/PIM/CMS/storage company writes an integration and ships it into the
+  CI HUB Connector. There is no CLI for the Access SDK. Worth noting that the CLI is deliberately
+  NOT a global binary: it is invoked through the package manager or the scaffolded project's npm
+  scripts, so the version a developer runs is the version pinned in their project rather than
+  whatever is installed on the machine.
+distribution:
+  global_binary: false
+  ships_with: '@ci-hub/integration-sdk'
+  install:
+  - npm install @ci-hub/integration-sdk
+  invocation:
+  - npx integration-cli <command>
+  - pnpm exec integration-cli <command>
+  - yarn integration-cli <command>
+  - bunx integration-cli <command>
+  - npm run dev
+  invocation_note: >-
+    Scaffolded projects include npm scripts wrapping these, so `npm run dev` is the ordinary path.
+quick_start:
+- npm install @ci-hub/integration-sdk
+- npx integration-cli auth login
+- npx integration-cli config --init
+- npx integration-cli dev
+commands:
+- command: dev
+  group: development
+  summary: Start the local development server with the test UI.
+  usage: integration-cli dev [--open]
+  flags:
+  - flag: --open
+    description: Open the browser automatically on start
+  detail: >-
+    Serves at http://localhost:8080 and watches the project for changes to .ts, .js, .json and
+    .ect files, restarting automatically on change.
+  interactive_shortcuts:
+  - key: r
+    action: Restart server
+  - key: u
+    action: Show server URL
+  - key: o
+    action: Open in browser
+  - key: c
+    action: Clear console
+  - key: q
+    action: Quit
+  - key: h
+    action: Show help
+- command: auth login
+  group: auth
+  summary: Authenticate the DEVELOPER's personal CI HUB account, used for submitting integrations.
+  usage: integration-cli auth login
+  detail: >-
+    Opens the browser for CI HUB login, waits up to 5 minutes for the sign-in to complete, then
+    stores credentials locally.
+  caveat: >-
+    Distinct from the auth HANDLERS (login, checkToken, refreshToken) an integration implements
+    for its own end users. Two different auth surfaces with the same vocabulary.
+- command: auth check
+  group: auth
+  summary: Verify the stored developer token, refreshing it if expired.
+  usage: integration-cli auth check
+  detail: >-
+    If the refresh also fails the token is cleared and a fresh login is required.
+- command: auth logout
+  group: auth
+  summary: Clear all stored credentials from the local machine.
+  usage: integration-cli auth logout
+- command: config
+  group: project
+  summary: Create or validate the project configuration file.
+  usage: integration-cli config [--init] [--check] [--name <filename>]
+  flags:
+  - flag: --init
+    description: Scaffold a starter config file with commented-out defaults
+  - flag: --check
+    description: Validate the existing config file against the schema
+  - flag: --name <filename>
+    description: 'Filename to use with --init: cihub.config.jsonc or cihub.config.json'
+  detail: >-
+    Running --init without --name prompts for a filename interactively.
+- command: submit
+  group: release
+  summary: Bundle and submit the integration to CI HUB for review.
+  usage: integration-cli submit [--dry]
+  flags:
+  - flag: --dry
+    description: List all files and warnings without actually submitting
+  detail: >-
+    Resolves the bundle from the config — source files, templates, assets and direct-access
+    helpers — checks for violations, and uploads. Requires a prior auth login.
+  limits:
+    max_bundle_size: 50 MB
+  failure_mode: >-
+    Bundle violations are reported when a file is reachable from the entry file but not matched by
+    the include patterns, or is explicitly excluded. Fix by adjusting declaration.include /
+    declaration.exclude in the config.
+config_file:
+  filenames:
+  - cihub.config.jsonc
+  - cihub.config.json
+  location: project root
+  all_fields_optional: true
+  sections:
+  - section: declaration
+    description: Controls how the integration's TypeScript source is discovered.
+    fields:
+    - name: entryFile
+      default: ./src/index.ts
+      description: Entry file that exports the integration's public API
+    - name: config
+      default: ./src/config.json
+      description: The integration's runtime JSON config
+    - name: include
+      default: '["src/**/*"]'
+      description: Glob patterns for files to include
+    - name: exclude
+      default: '[]'
+      description: Glob patterns for files to exclude
+    - name: respectTsconfigInclude
+      default: 'true'
+      description: Merge patterns from tsconfig.json include
+    - name: respectTsconfigExclude
+      default: 'true'
+      description: Merge patterns from tsconfig.json exclude
+    - name: respectGitignore
+      default: 'true'
+      description: Treat .gitignore entries as additional excludes
+key_flows:
+- flow: Build and ship an integration
+  steps:
+  - integration-cli auth login
+  - integration-cli config --init
+  - integration-cli dev  (implement handlers against the local test UI at localhost:8080)
+  - integration-cli config --check
+  - integration-cli submit --dry
+  - integration-cli submit
+summary:
+  command_count: 6
+  groups:
+  - development
+  - auth
+  - project
+  - release
+  binary_in: packages/ci-hub-packages.yml
+x-evidence:
+  fetched: '2026-08-12'
+  checks:
+  - url: https://developer.ci-hub.com/integration/reference/cli
+    http_status: 200
+  - url: https://developer.ci-hub.com/integration/llms-full.txt
+    http_status: 200
