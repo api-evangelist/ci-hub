@@ -4,13 +4,11 @@ status: published
 source: https://ci-hub.com/ai/mcp-server
 name: CI HUB MCP Server
 marketing_name: CI HUB Bright AI Connector
-description: >-
-  A hosted, remote MCP server that gives an AI client governed access to whichever DAM, PIM, CMS
-  or cloud-storage systems the end user has connected through CI HUB. The pitch is a governance
-  layer rather than a convenience layer: rather than staff pasting assets into a chat window or
-  circulating stale brand material, the AI reads the DAM directly and inherits that user's own
-  DAM permissions, because each user authenticates their own DAM account through CI HUB before
-  the AI can reach anything.
+description: 'A hosted, remote MCP server that gives an AI client governed access to whichever DAM, PIM,
+  CMS or cloud-storage systems the end user has connected through CI HUB. The pitch is a governance layer
+  rather than a convenience layer: rather than staff pasting assets into a chat window or circulating
+  stale brand material, the AI reads the DAM directly and inherits that user''s own DAM permissions, because
+  each user authenticates their own DAM account through CI HUB before the AI can reach anything.'
 transport:
   hosted: true
   url: https://mcp.ci-hub.com
@@ -30,9 +28,8 @@ transport:
   server_stack: Express (x-powered-by header)
 authorization:
   model: OAuth 2.1 with PKCE, per the MCP authorization spec
-  challenge: >-
-    WWW-Authenticate: Bearer error="unauthorized", error_description="Authorization needed",
-    resource_metadata="https://mcp.ci-hub.com/.well-known/oauth-protected-resource"
+  challenge: 'WWW-Authenticate: Bearer error="unauthorized", error_description="Authorization needed",
+    resource_metadata="https://mcp.ci-hub.com/.well-known/oauth-protected-resource"'
   protected_resource_metadata: https://mcp.ci-hub.com/.well-known/oauth-protected-resource
   authorization_server: https://mcp-auth.ci-hub.com
   authorization_server_metadata: https://mcp-auth.ci-hub.com/.well-known/oauth-authorization-server
@@ -44,10 +41,9 @@ authorization:
   - refresh_token
   scopes:
   - cihub
-  end_user_step: >-
-    Beyond the OAuth handshake with CI HUB, each user separately authenticates the DAM accounts
-    they want reachable. Users can change which systems are authenticated by disconnecting and
-    reconnecting to the MCP server.
+  end_user_step: Beyond the OAuth handshake with CI HUB, each user separately authenticates the DAM accounts
+    they want reachable. Users can change which systems are authenticated by disconnecting and reconnecting
+    to the MCP server.
   see: scopes/ci-hub-scopes.yml
 clients_supported:
 - ChatGPT
@@ -56,11 +52,10 @@ clients_supported:
 - Microsoft Copilot
 - any MCP-compatible client
 tools_source: https://support.ci-hub.com/ci-hub-bright-mcp-server-capabilities-and-actions
-tools_note: >-
-  Tool NAMES below are published verbatim by CI HUB in its capabilities article. Input SCHEMAS
-  are not published and could not be read: tools/list returns 401 until an OAuth token is
-  presented, so the live inputSchema for each tool requires authenticated introspection. Nothing
-  below is invented — no parameters are asserted, only the names and grouping CI HUB documents.
+tools_note: 'Tool NAMES below are published verbatim by CI HUB in its capabilities article. Input SCHEMAS
+  are not published and could not be read: tools/list returns 401 until an OAuth token is presented, so
+  the live inputSchema for each tool requires authenticated introspection. Nothing below is invented —
+  no parameters are asserted, only the names and grouping CI HUB documents.'
 tools:
 - name: Get-Available-Providers
   category: core
@@ -108,9 +103,8 @@ tools:
 limits:
   batch_actions_per_request: 10
   concurrent_operations: 5
-  note: >-
-    CI HUB documents up to 10 actions per batch request, with a maximum of 5 executing
-    concurrently and the remainder queued.
+  note: CI HUB documents up to 10 actions per batch request, with a maximum of 5 executing concurrently
+    and the remainder queued.
 summary:
   tool_count: 21
   read_tools: 6
@@ -135,3 +129,10 @@ x-evidence:
     http_status: 200
   - url: https://support.ci-hub.com/ci-hub-bright-mcp-server-capabilities-and-actions
     http_status: 200
+deployment:
+  mode: remote
+  endpoint: https://mcp.ci-hub.com
+  verified: probed
+  probe: wall
+  checked: '2026-08-12'
+  source: catalog MCP census

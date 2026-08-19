@@ -1,0 +1,383 @@
+{
+  "opencollection": "1.0.0",
+  "info": {
+    "name": "CI HUB Access SDK API",
+    "version": "v1"
+  },
+  "request": {
+    "auth": {
+      "type": "bearer",
+      "token": "{{bearerToken}}"
+    }
+  },
+  "items": [
+    {
+      "info": {
+        "name": "Exchange token",
+        "type": "http"
+      },
+      "http": {
+        "method": "POST",
+        "url": "https://live.ci-hub.com/api/v1/auth/exchangeToken",
+        "body": {
+          "type": "json",
+          "data": "{}"
+        },
+        "auth": {
+          "type": "bearer",
+          "token": "{{bearerToken}}"
+        }
+      },
+      "docs": "Exchanges a partner-signed JWT for CI HUB access and refresh tokens. Required as the\nfirst call of every Access SDK session.\n\n## Partner JWT\n\nSend the partner-signed JWT as `Authorization: Bearer <partner-signed-jwt>`.\n\n### Header\n\n| Field | Required | Value |\n|---|---|---|\n| `alg` | yes | `RS256` |\n| `kid` | yes | Must match a key published in the partner JWKS |\n| `typ` | optional | `JWT` |\n\n`HS256` is not accepted.\n\n### Payload\n\n| Claim | Type | Required | Notes |\n|---|---|---|---|\n| `iss` | s"
+    },
+    {
+      "info": {
+        "name": "Check token",
+        "type": "http"
+      },
+      "http": {
+        "method": "GET",
+        "url": "https://live.ci-hub.com/api/v1/auth/checkToken",
+        "auth": {
+          "type": "bearer",
+          "token": "{{bearerToken}}"
+        }
+      },
+      "docs": "Verifies that a CI HUB access token is still valid and returns the user profile\nenvelope the partner platform needs to display in its UI. Typical use: confirm an\nactive session before rendering a CI HUB-backed view, or revalidate after a long\nidle period.\n\n`licenseState`, `licenseExpires`, and `isTrialLicense` describe the SDK\nsubscription, not the DAM provider. They are informational; the SDK subscription\nitself is re-checked on every call.\n\nA 401 here is the cue to start a new exchange. A 402 "
+    },
+    {
+      "info": {
+        "name": "Refresh token",
+        "type": "http"
+      },
+      "http": {
+        "method": "GET",
+        "url": "https://live.ci-hub.com/api/v1/auth/refreshToken",
+        "auth": {
+          "type": "bearer",
+          "token": "{{bearerToken}}"
+        }
+      },
+      "docs": "Renews a session. This is a shared endpoint: the token in `provider-authorization`\ndecides which session is renewed.\n\n## CI HUB session\n\nSend the CI HUB refresh token returned at exchange in `provider-authorization` to\nmint a new access token and a new refresh token. `Authorization` carries the current\naccess token, which may already be expired (only its signature is checked here).\nThe refresh token's `sub` must match the access token's `sub`; cross-user refresh\nattempts are rejected.\n\nThe new a"
+    },
+    {
+      "info": {
+        "name": "Logout",
+        "type": "http"
+      },
+      "http": {
+        "method": "GET",
+        "url": "https://live.ci-hub.com/api/v1/auth/logout",
+        "auth": {
+          "type": "bearer",
+          "token": "{{bearerToken}}"
+        }
+      },
+      "docs": "Signals the end of a partner-side session. For Access SDK partners this endpoint is\nadvisory: CI HUB does not maintain server-side session state for SDK tokens, so\nlogout returns 200 without revoking the refresh token. The partner platform is\nresponsible for discarding the cached access and refresh tokens locally.\n\nCI HUB does not currently maintain a refresh-token blocklist for Access SDK\npartners. A refresh token remains valid until its 30-day clock runs out, even after\na logout call. Partners"
+    },
+    {
+      "info": {
+        "name": "Get providers",
+        "type": "http"
+      },
+      "http": {
+        "method": "GET",
+        "url": "https://live.ci-hub.com/api/v1/auth/providers",
+        "auth": {
+          "type": "bearer",
+          "token": "{{bearerToken}}"
+        }
+      },
+      "docs": "Returns the list of DAM providers available to the authenticated CI HUB user. The\npartner platform uses the result to render a connection picker and to pass each\nprovider's `id` on subsequent login and content calls.\n\nThis endpoint is intentionally lenient on authentication so the partner platform\ncan render its connection picker before any DAM session exists. A missing or\ninvalid `Authorization` header returns 200 with a single-entry list containing\nonly the CI HUB platform connection. When the"
+    },
+    {
+      "info": {
+        "name": "DAM login (poll)",
+        "type": "http"
+      },
+      "http": {
+        "method": "GET",
+        "url": "https://live.ci-hub.com/api/v1/auth/login",
+        "params": [
+          {
+            "name": "state",
+            "value": "",
+            "type": "query",
+            "description": "@description The `state` returned by initiate. Identifies and authorizes the call."
+          },
+          {
+            "name": "polling",
+            "value": "",
+            "type": "query",
+            "description": "@description Send `true` on every initiate and poll call; it selects the JSON response shape."
+          }
+        ],
+        "auth": {
+          "type": "bearer",
+          "token": "{{bearerToken}}"
+        }
+      },
+      "docs": "Returns the current state of a login started by initiate. The `state` value is the\ncredential for this call, so no `Authorization` header is needed. Poll on an\ninterval until the response carries tokens or an error.\n\nThe returned `access_token` is the DAM connection token and is separate from the\nCI HUB access token in your `Authorization` header. Content calls carry both: the\nCI HUB token in `Authorization` and this token in `provider-authorization`.\n\nA successful poll consumes the `state`. A `"
+    },
+    {
+      "info": {
+        "name": "DAM login (initiate)",
+        "type": "http"
+      },
+      "http": {
+        "method": "POST",
+        "url": "https://live.ci-hub.com/api/v1/auth/login",
+        "params": [
+          {
+            "name": "provider",
+            "value": "",
+            "type": "query",
+            "description": "@description Provider identifier from the providers listing."
+          },
+          {
+            "name": "polling",
+            "value": "",
+            "type": "query",
+            "description": "@description Send `true` on every initiate and poll call; it selects the JSON response shape."
+          },
+          {
+            "name": "serverUrl",
+            "value": "",
+            "type": "query",
+            "description": "Provider parameter. The DAM instance the end user signs in to, as a full origin.\nRead by `bynder`, `dash`, `fotoware`, `frontify`, `picturepark`, and `purered`."
+          }
+        ],
+        "auth": {
+          "type": "bearer",
+          "token": "{{bearerToken}}"
+        }
+      },
+      "docs": "Starts a login for the provider named in the `provider` query parameter (an `id`\nfrom the providers listing). DAM login is a two-call flow: the partner platform\nstarts a login for a chosen provider, opens the returned URL in the end user's\nbrowser, then polls until the end user finishes signing in at the DAM.\n\nOpen `redirect_uri` for the end user (popup or full-page redirect). Keep `state`\nfor polling.\n\nFailures past the token check (an unknown provider, a provider the user is not\nlicensed for, "
+    },
+    {
+      "info": {
+        "name": "Get provider info",
+        "type": "http"
+      },
+      "http": {
+        "method": "GET",
+        "url": "https://live.ci-hub.com/api/v1/system/providerInfo",
+        "auth": {
+          "type": "bearer",
+          "token": "{{bearerToken}}"
+        }
+      },
+      "docs": "Returns runtime details for the DAM provider the end user is connected to: the\nprovider's host prefix, the search filters this connection exposes, and any\nprovider-specific settings the partner platform needs to render its UI. The\nprovider is identified by the `provider-authorization` token, so there is no\nprovider path or query parameter.\n\nThis is the post-login companion to the static feature flags in the providers\nlisting. The listing tells the partner what a provider supports before connecti"
+    },
+    {
+      "info": {
+        "name": "Search assets",
+        "type": "http"
+      },
+      "http": {
+        "method": "GET",
+        "url": "https://live.ci-hub.com/api/v1/assets/search",
+        "params": [
+          {
+            "name": "query",
+            "value": "",
+            "type": "query",
+            "description": "@description The search term. When omitted or empty, providers that support it return an unfiltered listing."
+          },
+          {
+            "name": "parentId",
+            "value": "",
+            "type": "query",
+            "description": "@description Search only within the specified folder. Omit or send an empty string for a global search."
+          },
+          {
+            "name": "size",
+            "value": "",
+            "type": "query",
+            "description": "Number of assets to return per page. The maximum value is also specified by the provider in the server configuration. The smaller of the two values will be used."
+          },
+          {
+            "name": "more",
+            "value": "",
+            "type": "query",
+            "description": "Token for continuing a previous request on the next page. Should be set to the value of `more` as received by the previous call to this endpoint."
+          },
+          {
+            "name": "filters",
+            "value": "",
+            "type": "query",
+            "description": "List of filters to apply to the search. An array of option ids is expected here. You can optain them in the response of the previous call to this endpoint inside each filter in the `filters` property."
+          },
+          {
+            "name": "timeZone",
+            "value": "",
+            "type": "query",
+            "description": "Only used for AdmiralCloud and Asana.\nTimezone for date/time formatting. It expects a valid timezone based on the Intl.DateTimeFormat library.\nUse Intl.DateTimeFormat().resolvedOptions().timeZone to get the timezone of the user.\nSee https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/DateTimeFormat/resolvedOptions#timezone for more information."
+          },
+          {
+            "name": "dataLocale",
+            "value": "",
+            "type": "query",
+            "description": "If the provider supports data localization, this is the locale for the content of the data (e.g., values of metadata fields). You can find the supported data locales of the provider in the response of the /system/providerInfo route. Send the id of the locale here."
+          },
+          {
+            "name": "uiLocale",
+            "value": "",
+            "type": "query",
+            "description": "Locale for user interface elements. For example, labels of metadata fields. Only the locales in the enum are supported. When omitted, providers fall back to `en`."
+          }
+        ],
+        "auth": {
+          "type": "bearer",
+          "token": "{{bearerToken}}"
+        }
+      },
+      "docs": "Keyword search across assets in the connected DAM. Results include metadata,\nthumbnail, and download URLs; no separate requests are needed to display previews.\nSearch behavior, such as which fields a keyword matches, is defined by the DAM.\n\nProviders expose their own filter facets beyond the documented parameters. The\navailable facets are returned as `filters` in the response and in provider info;\nsend the selected facet values as additional query parameters."
+    },
+    {
+      "info": {
+        "name": "Search by image",
+        "type": "http"
+      },
+      "http": {
+        "method": "POST",
+        "url": "https://live.ci-hub.com/api/v1/assets/search",
+        "params": [
+          {
+            "name": "size",
+            "value": "",
+            "type": "query",
+            "description": "Number of assets to return per page. The maximum value is also specified by the provider in the server configuration. The smaller of the two values will be used."
+          },
+          {
+            "name": "more",
+            "value": "",
+            "type": "query",
+            "description": "Token for continuing a previous request on the next page. Should be set to the value of `more` as received by the previous call to this endpoint."
+          }
+        ],
+        "body": {
+          "type": "json",
+          "data": "{}"
+        },
+        "auth": {
+          "type": "bearer",
+          "token": "{{bearerToken}}"
+        }
+      },
+      "docs": "Similarity search using a reference image. Provide either Base64-encoded image\ndata or an HTTP/HTTPS URL to the image. Not supported by all providers; check the\nprovider capabilities in the providers listing.\n\nProviders without this capability answer 501, 404, or 400 depending on the\nintegration. Treat any of them as \"not supported here\"."
+    },
+    {
+      "info": {
+        "name": "Get folder",
+        "type": "http"
+      },
+      "http": {
+        "method": "GET",
+        "url": "https://live.ci-hub.com/api/v1/assets/folder/:folderId",
+        "params": [
+          {
+            "name": "size",
+            "value": "",
+            "type": "query",
+            "description": "Number of assets to return per page. The maximum value is also specified by the provider in the server configuration. The smaller of the two values will be used."
+          },
+          {
+            "name": "more",
+            "value": "",
+            "type": "query",
+            "description": "Token for continuing a previous request on the next page. Should be set to the value of `more` as received by the previous call to this endpoint."
+          },
+          {
+            "name": "filters",
+            "value": "",
+            "type": "query",
+            "description": "List of filters to apply to the search. An array of option ids is expected here. You can optain them in the response of the previous call to this endpoint inside each filter in the `filters` property."
+          },
+          {
+            "name": "timeZone",
+            "value": "",
+            "type": "query",
+            "description": "Only used for AdmiralCloud and Asana.\nTimezone for date/time formatting. It expects a valid timezone based on the Intl.DateTimeFormat library.\nUse Intl.DateTimeFormat().resolvedOptions().timeZone to get the timezone of the user.\nSee https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/DateTimeFormat/resolvedOptions#timezone for more information."
+          },
+          {
+            "name": "dataLocale",
+            "value": "",
+            "type": "query",
+            "description": "If the provider supports data localization, this is the locale for the content of the data (e.g., values of metadata fields). You can find the supported data locales of the provider in the response of the /system/providerInfo route. Send the id of the locale here."
+          },
+          {
+            "name": "uiLocale",
+            "value": "",
+            "type": "query",
+            "description": "Locale for user interface elements. For example, labels of metadata fields. Only the locales in the enum are supported. When omitted, providers fall back to `en`."
+          },
+          {
+            "name": "folderId",
+            "value": "",
+            "type": "path",
+            "description": "@description Folder identifier. Pass `root` to start at the connected provider's root folder, then traverse by the `id` of each subfolder."
+          }
+        ],
+        "auth": {
+          "type": "bearer",
+          "token": "{{bearerToken}}"
+        }
+      },
+      "docs": "Browses folder contents. Returns subfolders and assets with metadata and thumbnail\nURLs. Navigation is hierarchical: start from the root folder and traverse by ID.\nAsset pagination uses the `more` cursor; folders are not paged by it."
+    },
+    {
+      "info": {
+        "name": "Get asset",
+        "type": "http"
+      },
+      "http": {
+        "method": "GET",
+        "url": "https://live.ci-hub.com/api/v1/assets/asset/:assetId",
+        "params": [
+          {
+            "name": "assetId",
+            "value": "",
+            "type": "path",
+            "description": "@description Asset identifier."
+          }
+        ],
+        "auth": {
+          "type": "bearer",
+          "token": "{{bearerToken}}"
+        }
+      },
+      "docs": "Retrieves an asset by its ID. This is not a download. The `downloadUrl` of the asset should be used to download the asset."
+    },
+    {
+      "info": {
+        "name": "Get asset versions",
+        "type": "http"
+      },
+      "http": {
+        "method": "GET",
+        "url": "https://live.ci-hub.com/api/v1/assets/assetversions/:assetId",
+        "params": [
+          {
+            "name": "withMaster",
+            "value": "",
+            "type": "query",
+            "description": "@description Include the master version in the result."
+          },
+          {
+            "name": "assetId",
+            "value": "",
+            "type": "path",
+            "description": "@description Asset identifier."
+          }
+        ],
+        "auth": {
+          "type": "bearer",
+          "token": "{{bearerToken}}"
+        }
+      },
+      "docs": "Retrieves the version history for an asset. Providers without versioning answer\n501, 404, or 400 depending on the integration. Treat any of them as \"not\nsupported here\"."
+    }
+  ],
+  "bundled": true
+}
