@@ -33,6 +33,19 @@ tags:
 - Creative Tools
 - Marketing
 - Brand Management
+- MCP
+- Cloud Storage
+- Germany
+tags_raw:
+- Company
+- Digital Asset Management
+- Content Management
+- Product Information Management
+- Integration
+- Connectors
+- Creative Tools
+- Marketing
+- Brand Management
 - Model Context Protocol
 - Cloud Storage
 - Germany
@@ -123,6 +136,11 @@ apis:
   humanURL: https://ci-hub.com/ai/mcp-server
   baseURL: https://mcp.ci-hub.com
   tags:
+  - MCP
+  - Artificial Intelligence
+  - Digital Asset Management
+  - Agents
+  tags_raw:
   - Model Context Protocol
   - Artificial Intelligence
   - Digital Asset Management
