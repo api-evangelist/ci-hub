@@ -50,60 +50,17 @@ tags_raw:
 - Cloud Storage
 - Germany
 apis:
-- aid: ci-hub:access-sdk
-  name: CI HUB Access SDK API
-  description: >-
-    The HTTP API a partner platform calls to embed CI HUB's DAM connectivity in its
-    own product. A partner backend signs an RS256 JWT and exchanges it at POST /auth/exchangeToken
-    for a CI HUB access token (1 hour) and refresh token (30 days); the end user then connects a
-    DAM provider through POST /auth/login and the partner polls GET /auth/login with the returned
-    state. Every content call afterwards carries two tokens — the CI HUB access token in
-    Authorization and the DAM connection token in provider-authorization. Content is read-only in
-    this release: folder browse, keyword search, similarity search from a reference image, asset
-    detail and asset version history, all over one contract no matter which DAM is behind it.
-  humanURL: https://developer.ci-hub.com/access
-  baseURL: https://live.ci-hub.com/api/v1
-  tags:
-  - Digital Asset Management
-  - Assets
-  - Search
-  - Authentication
-  - Content
-  properties:
-  - type: OpenAPI
-    url: openapi/ci-hub-access-openapi.yml
-  - type: Documentation
-    url: https://developer.ci-hub.com/access
-  - type: APIReference
-    url: https://developer.ci-hub.com/access/content
-  - type: GettingStarted
-    url: https://developer.ci-hub.com/access/getting-started
-  - type: Authentication
-    url: authentication/ci-hub-authentication.yml
-  - type: ErrorCatalog
-    url: errors/ci-hub-problem-types.yml
-  - type: RateLimits
-    url: rate-limits/ci-hub-rate-limits.yml
-  - type: ChangeLog
-    url: changelog/ci-hub-changelog.yml
-  - type: Overlay
-    url: overlays/ci-hub-access-overlay.yaml
-  - type: DataModel
-    url: data-model/ci-hub-data-model.yml
-  - type: Sandbox
-    url: sandbox/ci-hub-sandbox.yml
 - aid: ci-hub:integration-sdk
   name: CI HUB Integration SDK
   description: >-
-    The other direction of the CI HUB platform. A DAM, MAM, PIM, CMS, stock or
-    cloud-storage vendor writes an integration that translates its own proprietary API into CI
-    HUB's handler format using defineIntegration, and the result appears inside every CI HUB
-    connector — Adobe Creative Cloud, Microsoft 365, Google Workspace, Figma and the rest. It is
-    a handler contract rather than an HTTP API: the vendor implements named handlers (login,
-    checkToken, refreshToken, logout, search, getFolder, download, upload, createAsset,
-    updateAsset, task handlers) that CI HUB invokes, and declares a capability matrix describing
-    what its platform supports. Shipped as the npm package @ci-hub/integration-sdk with an
-    integration-cli for scaffolding, local development against a test UI, and submission.
+    The other direction of the CI HUB platform. A DAM, MAM, PIM, CMS, stock or cloud-storage vendor writes
+    an integration that translates its own proprietary API into CI HUB's handler format using defineIntegration,
+    and the result appears inside every CI HUB connector — Adobe Creative Cloud, Microsoft 365, Google
+    Workspace, Figma and the rest. It is a handler contract rather than an HTTP API: the vendor implements
+    named handlers (login, checkToken, refreshToken, logout, search, getFolder, download, upload, createAsset,
+    updateAsset, task handlers) that CI HUB invokes, and declares a capability matrix describing what
+    its platform supports. Shipped as the npm package @ci-hub/integration-sdk with an integration-cli
+    for scaffolding, local development against a test UI, and submission.
   humanURL: https://developer.ci-hub.com/integration
   baseURL: https://developer.ci-hub.com/integration
   tags:
@@ -123,16 +80,15 @@ apis:
 - aid: ci-hub:mcp
   name: CI HUB MCP Server (Bright AI Connector)
   description: >-
-    A hosted, remote Model Context Protocol server that gives an AI client governed
-    access to the DAM systems a user has connected through CI HUB. It exposes core system, asset
-    and folder tools — provider listing, brand config, file-to-text conversion, asset search,
-    upload by URL, download URL, rename, move, delete, version history, folder browse/create/
-    rename/move/delete, plus batch variants — to ChatGPT, Claude, Gemini, Microsoft Copilot and
-    any other MCP-compatible client. Each user authenticates their own DAM account through CI
-    HUB first, so the AI inherits that user's existing DAM permissions rather than a service
-    account's. Authorization is OAuth 2.1: the server publishes RFC 9728 protected-resource
-    metadata pointing at mcp-auth.ci-hub.com, which advertises RFC 8414 authorization-server
-    metadata with dynamic client registration and PKCE S256.
+    A hosted, remote Model Context Protocol server that gives an AI client governed access to the DAM
+    systems a user has connected through CI HUB. It exposes core system, asset and folder tools — provider
+    listing, brand config, file-to-text conversion, asset search, upload by URL, download URL, rename,
+    move, delete, version history, folder browse/create/ rename/move/delete, plus batch variants — to
+    ChatGPT, Claude, Gemini, Microsoft Copilot and any other MCP-compatible client. Each user authenticates
+    their own DAM account through CI HUB first, so the AI inherits that user's existing DAM permissions
+    rather than a service account's. Authorization is OAuth 2.1: the server publishes RFC 9728 protected-resource
+    metadata pointing at mcp-auth.ci-hub.com, which advertises RFC 8414 authorization-server metadata
+    with dynamic client registration and PKCE S256.
   humanURL: https://ci-hub.com/ai/mcp-server
   baseURL: https://mcp.ci-hub.com
   tags:
@@ -154,12 +110,98 @@ apis:
     url: https://support.ci-hub.com/ci-hub-bright-mcp-server-capabilities-and-actions
   - type: OAuthScopes
     url: scopes/ci-hub-scopes.yml
+- aid: ci-hub:ci-hub-assets-api
+  name: CI HUB Assets API
+  description: The Assets API from CI HUB — 4 operation(s) for assets.
+  humanURL: https://developer.ci-hub.com/access
+  baseURL: https://live.ci-hub.com/api/v1
+  tags:
+  - Assets
+  properties:
+  - type: OpenAPI
+    url: openapi/ci-hub-assets-api-openapi.yml
+  - type: Documentation
+    url: https://developer.ci-hub.com/access
+  - type: APIReference
+    url: https://developer.ci-hub.com/access/content
+  - type: GettingStarted
+    url: https://developer.ci-hub.com/access/getting-started
+  - type: Authentication
+    url: authentication/ci-hub-authentication.yml
+  - type: ErrorCatalog
+    url: errors/ci-hub-problem-types.yml
+  - type: RateLimits
+    url: rate-limits/ci-hub-rate-limits.yml
+  - type: ChangeLog
+    url: changelog/ci-hub-changelog.yml
+  - type: DataModel
+    url: data-model/ci-hub-data-model.yml
+  - type: Sandbox
+    url: sandbox/ci-hub-sandbox.yml
+- aid: ci-hub:ci-hub-auth-api
+  name: CI HUB Auth API
+  description: The Auth API from CI HUB — 6 operation(s) for auth.
+  humanURL: https://developer.ci-hub.com/access
+  baseURL: https://live.ci-hub.com/api/v1
+  tags:
+  - Auth
+  properties:
+  - type: OpenAPI
+    url: openapi/ci-hub-auth-api-openapi.yml
+  - type: Documentation
+    url: https://developer.ci-hub.com/access
+  - type: APIReference
+    url: https://developer.ci-hub.com/access/content
+  - type: GettingStarted
+    url: https://developer.ci-hub.com/access/getting-started
+  - type: Authentication
+    url: authentication/ci-hub-authentication.yml
+  - type: ErrorCatalog
+    url: errors/ci-hub-problem-types.yml
+  - type: RateLimits
+    url: rate-limits/ci-hub-rate-limits.yml
+  - type: ChangeLog
+    url: changelog/ci-hub-changelog.yml
+  - type: DataModel
+    url: data-model/ci-hub-data-model.yml
+  - type: Sandbox
+    url: sandbox/ci-hub-sandbox.yml
+- aid: ci-hub:ci-hub-system-api
+  name: CI HUB System API
+  description: The System API from CI HUB — 1 operation(s) for system.
+  humanURL: https://developer.ci-hub.com/access
+  baseURL: https://live.ci-hub.com/api/v1
+  tags:
+  - System
+  properties:
+  - type: OpenAPI
+    url: openapi/ci-hub-system-api-openapi.yml
+  - type: Documentation
+    url: https://developer.ci-hub.com/access
+  - type: APIReference
+    url: https://developer.ci-hub.com/access/content
+  - type: GettingStarted
+    url: https://developer.ci-hub.com/access/getting-started
+  - type: Authentication
+    url: authentication/ci-hub-authentication.yml
+  - type: ErrorCatalog
+    url: errors/ci-hub-problem-types.yml
+  - type: RateLimits
+    url: rate-limits/ci-hub-rate-limits.yml
+  - type: ChangeLog
+    url: changelog/ci-hub-changelog.yml
+  - type: DataModel
+    url: data-model/ci-hub-data-model.yml
+  - type: Sandbox
+    url: sandbox/ci-hub-sandbox.yml
 maintainers:
 - FN: Kin Lane
   email: kin@apievangelist.com
 - FN: APIs.json
   email: info@apis.io
 common:
+- type: Overlay
+  url: overlays/ci-hub-access-overlay.yaml
 - type: Website
   url: https://ci-hub.com/
 - type: DeveloperPortal
