@@ -16,6 +16,18 @@ description: >-
   (mcp.ci-hub.com, marketed as the Bright AI Connector) that exposes governed, permission-mapped
   DAM search and asset operations to ChatGPT, Claude, Gemini, Microsoft Copilot and any other
   MCP-compatible client.
+deliveryModel:
+  model: saas
+  open_source: false
+  commercial: true
+  callable_host: true
+  label: Hosted service · you call their endpoint
+  confidence: high
+  source:
+  - openapi
+  - pricing
+  generated: '2026-08-28'
+  method: derived
 image: https://ci-hub.com/hubfs/CI-HUB_logo-new.svg
 url: https://raw.githubusercontent.com/api-evangelist/ci-hub/refs/heads/main/apis.yml
 x-type: company
