@@ -156,6 +156,8 @@ apis:
   humanURL: https://developer.ci-hub.com/access
   baseURL: https://live.ci-hub.com/api/v1
   tags:
+  - Authentication
+  tags_raw:
   - Auth
   properties:
   - type: OpenAPI
