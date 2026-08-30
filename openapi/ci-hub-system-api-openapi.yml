@@ -1,0 +1,628 @@
+openapi: 3.2.0
+info:
+  title: CI HUB Access SDK System API
+  version: v1
+  summary: 'Embed CI HUB asset connectivity into a partner platform: exchange a partner-signed JWT for a CI HUB session, connect an end user to a DAM provider, then browse, search and read assets from that DAM over one uniform contract.'
+  description: 'The CI HUB Access SDK API is the HTTP surface a partner platform calls to reach any DAM, MAM, PIM, cloud-storage or work-management system CI HUB connects to, without integrating each one separately.
+
+
+    Authentication is a token exchange: the partner backend signs an RS256 JWT for the user and exchanges it at `POST /auth/exchangeToken` for a CI HUB access token (1 hour) and refresh token (30 days). The end user then connects a DAM provider through `POST /auth/login`, which returns a redirect URI plus a `state` the partner polls at `GET /auth/login`. From that point every content call carries two tokens: the CI HUB access token in `Authorization` and the DAM connection token in `provider-authorization`.
+
+
+    Content is read-only in this release: folder browse, keyword search, similarity search by reference image, asset detail and asset version history. Every failure returns one error envelope whose `error.source` separates CI HUB platform faults (`cihub`) from DAM provider faults (`integration`).
+
+
+    The API is served under the `/api/v1` prefix and is not versioned beyond it; additive changes ship in place, breaking changes are announced on the changelog before they ship.'
+  termsOfService: https://ci-hub.com/legal/terms
+  contact:
+    name: CI HUB GmbH
+    url: https://developer.ci-hub.com/access
+servers:
+- url: https://live.ci-hub.com/api/v1
+  description: Production
+- url: https://stage.ci-hub.com/api/v1
+  description: Staging / integration environment used throughout the published examples
+security:
+- cihubAccessToken: []
+tags:
+- name: System
+paths:
+  /system/providerInfo:
+    get:
+      operationId: getProviderInfoSdk
+      summary: Get provider info
+      description: 'Returns runtime details for the DAM provider the end user is connected to: the
+
+        provider''s host prefix, the search filters this connection exposes, and any
+
+        provider-specific settings the partner platform needs to render its UI. The
+
+        provider is identified by the `provider-authorization` token, so there is no
+
+        provider path or query parameter.
+
+
+        This is the post-login companion to the static feature flags in the providers
+
+        listing. The listing tells the partner what a provider supports before connecting;
+
+        this endpoint returns the live details once the end user has logged in.
+
+
+        Treat the object as provider-specific and read only the fields your integration
+
+        needs. A provider with no runtime details returns an empty object.'
+      responses:
+        '200':
+          $ref: '#/components/responses/ProviderInfoResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: '| Code | When |
+
+            |---|---|
+
+            | `cihub-access-token-missing` | No `Authorization` header. |
+
+            | `cihub-access-token-invalid` | CI HUB token signature failed, expired, or the user record was removed. |'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: '| Code | When |
+
+            |---|---|
+
+            | `provider-access-token-missing` | No `provider-authorization` header. Complete a DAM login first. |
+
+            | `provider-access-token-invalid` | The `provider-authorization` token failed verification or expired. Start a new DAM login. |'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      security:
+      - cihubAccessToken: []
+        damToken: []
+      tags:
+      - System
+components:
+  responses:
+    InternalServerError:
+      description: '| Code | When |
+
+        |---|---|
+
+        | `cihub-internal-error` | Transient CI HUB failure. Safe to retry. |'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    BadRequest:
+      description: '| Code | When |
+
+        |---|---|
+
+        | `cihub-bad-request` | A required parameter is missing or invalid. |
+
+        | `cihub-internal-error` | The license check failed transiently. Legacy paths answer this with 400 for wire compatibility; it is retryable despite the 4xx status. |
+
+        | `integration-operation-failed` | The DAM rejected the operation, or the adapter does not implement it. `provider` names the integration. |'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    ProviderInfoResponse:
+      description: '@description Provider-specific information, capabilities, and configuration that is available after logging in to the provider.'
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              remoteSystemPrefix:
+                type: string
+                description: The URL to the remote system, usually the hostname of the API endpoint. Absent for providers without runtime details, which return an empty object.
+                examples:
+                - api.box.com
+              nativeFolderOrder:
+                type: boolean
+                description: If true, the folders will be listed in the order they are delivered in by the provider API. If false, the folders are listed alphabetically.
+                examples:
+                - true
+              dataLocales:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                      description: Locale identifier.
+                      examples:
+                      - en-GB
+                    name:
+                      type: string
+                      description: Short locale name.
+                      examples:
+                      - en-GB
+                    displayName:
+                      type: string
+                      description: Full human-readable locale name
+                      examples:
+                      - English (United Kingdom)
+                    default:
+                      type: boolean
+                      description: Whether this is the default locale.
+                      examples:
+                      - true
+                description: '@description List of languages certain data of the provider is available in.'
+              customMetadata:
+                type: object
+                properties:
+                  groups:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          description: Unique identifier for the group
+                          examples:
+                          - custom
+                        name:
+                          type: string
+                          description: Default display name for the group
+                          examples:
+                          - Custom Metadata
+                        i18nName:
+                          type: object
+                          additionalProperties:
+                            type: string
+                          description: Localized names for the group in different languages
+                          examples:
+                          - en: Custom Metadata
+                            de: Benutzerdefinierte Metadaten
+                    description: '@description Custom metadata field groups.'
+                  fields:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          description: Unique identifier for the field
+                          examples:
+                          - custom#123
+                        name:
+                          type: string
+                          description: Default display name for the field
+                          examples:
+                          - Asset Category
+                        groupId:
+                          type: string
+                          description: ID of the group this field belongs to
+                          examples:
+                          - custom
+                        i18nName:
+                          type: object
+                          additionalProperties:
+                            type: string
+                          description: Localized names for the field in different languages
+                          examples:
+                          - en: Asset Category
+                            de: Asset-Kategorie
+                            fr: Catégorie d'actif
+                    description: '@description Available custom metadata fields.'
+                description: '@description Provider-specific metadata configuration'
+              filters:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                      description: '@description Filter identifier'
+                    name:
+                      type: string
+                      description: '@description Filter display name'
+                    i18nName:
+                      type: object
+                      additionalProperties:
+                        type: string
+                      description: Object containing the filter name for each supported locale for this filter.
+                      examples:
+                      - en: Name
+                        de: Name
+                        fr: Nom
+                    options:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                          name:
+                            type: string
+                          default:
+                            type: boolean
+                          isDisabled:
+                            type: boolean
+                          isActive:
+                            type: boolean
+                          i18nName:
+                            type: object
+                            additionalProperties:
+                              type: string
+                            description: Object containing the filter option name for each supported locale for this filter option.
+                            examples:
+                            - en: Name
+                              de: Name
+                              fr: Nom
+                        additionalProperties:
+                          type: string
+                      description: '@description Available filter options'
+                    showInSimilarSearch:
+                      type: boolean
+                      description: '@description Whether filter appears in similar search'
+                  additionalProperties: {}
+                description: '@description Those are the pre-search filters that can be selected before the search is triggered.'
+              createAssetOptions:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                      description: '@description Option identifier'
+                    name:
+                      type: string
+                      description: '@description Option display name'
+                    type:
+                      type: string
+                      description: Input type. This list is not complete.
+                      examples:
+                      - select
+                    required:
+                      type: boolean
+                      description: Whether this option is required
+                      examples:
+                      - false
+                    options:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                          name:
+                            type: string
+                      description: '@description Available choices for this option'
+                description: '@description Options for asset creation'
+              updateAssetOptions:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                      description: '@description Option identifier'
+                    name:
+                      type: string
+                      description: '@description Option display name'
+                    type:
+                      type: string
+                      description: Input type. This list is not complete.
+                      examples:
+                      - select
+                    required:
+                      type: boolean
+                      description: '@description Whether this option is required'
+                    options:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                          name:
+                            type: string
+                      description: '@description Available choices for this option'
+                description: '@description Options for asset updating'
+              requestHeaders:
+                type: object
+                additionalProperties: {}
+                description: Additional HTTP headers required for uploading or downloading assets or thumbnails. Request headers are normally sent in the provider capabilities. There are edge cases where the request headers are only available after the login, this is where they are added to the provider info.
+                examples:
+                - x-api-key: api-key-value
+              searchConfigs:
+                type: object
+                properties:
+                  searchQueryRequired:
+                    type: boolean
+                    description: Whether a search query is required or not. If true, the user must enter a search query before a search can be triggered.
+                    examples:
+                    - false
+                  configs:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          description: Unique identifier for the configuration option
+                          examples:
+                          - single:searchMode
+                        name:
+                          type: string
+                          description: Display name for the configuration option
+                          examples:
+                          - Search Mode
+                        i18nName:
+                          type: object
+                          additionalProperties:
+                            type: string
+                          description: Object containing the display name for each supported locale for this configuration option.
+                          examples:
+                          - en: Search Mode
+                            de: Suchmodus
+                            fr: Mode de recherche
+                        type:
+                          type: string
+                          description: Type of configuration option. This list is not complete.
+                          examples:
+                          - select
+                        options:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              id:
+                                type: string
+                                description: Option identifier
+                                examples:
+                                - all
+                              name:
+                                type: string
+                                description: Display name for the option
+                                examples:
+                                - All
+                              isActive:
+                                type: boolean
+                                description: Whether this option is currently active/selected
+                                examples:
+                                - false
+                          description: '@description Available options for this configuration.'
+                    description: '@description Array of search configurations.'
+                description: '@description Search configuration options. On every search you should send the active options ids in the filters fields.'
+              transformation:
+                type: object
+                properties:
+                  availableTransformationsUrl:
+                    type: string
+                    description: URL to get available transformations.
+                    examples:
+                    - https://api.example.com/get-available-transformations
+                  actionUrl:
+                    type: string
+                    description: URL to perform a transformation.
+                    examples:
+                    - https://api.example.com/do-transformation
+                description: '@description Transformation configuration.'
+              rightsManagement:
+                type: object
+                properties:
+                  addExternalAsset:
+                    type: object
+                    properties:
+                      actionUrl:
+                        type: string
+                        description: URL endpoint for adding external assets
+                        examples:
+                        - https://api.provider.com/addExternalAsset
+                    description: '@description Configuration for adding external assets'
+                  checkExternalAssets:
+                    type: object
+                    properties:
+                      actionUrl:
+                        type: string
+                        description: URL endpoint for checking external assets
+                        examples:
+                        - https://api.provider.com/checkExternalAssets
+                    description: '@description Configuration for checking external assets'
+                  checkClearance:
+                    type: object
+                    properties:
+                      actionUrl:
+                        type: string
+                        description: URL endpoint for checking clearance
+                        examples:
+                        - https://api.provider.com/checkClearance
+                      filters:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            type:
+                              type: string
+                              description: Type of filter control. This list is not complete.
+                              examples:
+                              - date
+                            id:
+                              type: string
+                              description: Filter identifier
+                              examples:
+                              - inDate
+                            name:
+                              type: string
+                              description: Filter display name
+                              examples:
+                              - In Date
+                            options:
+                              type: array
+                              items:
+                                type: object
+                                properties:
+                                  id:
+                                    type: string
+                                    description: '@description Option identifier'
+                                  name:
+                                    type: string
+                                    description: '@description Option display name'
+                                  path:
+                                    type: array
+                                    items:
+                                      type: string
+                                    description: '@description Hierarchical path for nested options'
+                              description: '@description Available filter options (only for multiselect type)'
+                        description: '@description Available filters for clearance checking'
+                    description: '@description Configuration for checking clearance rights'
+                description: '@description Rights management configuration for the provider'
+              assetSearchHelpUrl:
+                type: string
+                description: URL for further information on asset search, e.g. in Asset Bank a link to view the last search.
+                format: uri
+                examples:
+                - https://help.example.com/asset-search
+  schemas:
+    StructuredError:
+      type: object
+      properties:
+        code:
+          type: string
+          description: 'Machine-readable error code. Format: `{source}-{error-type}` in kebab-case.
+
+            Clients can switch on this field to handle specific error types.'
+          examples:
+          - integration-forbidden
+          - integration-auth-failed
+          - cihub-access-token-invalid
+          - cihub-license-required
+          - cihub-unknown-error
+        source:
+          type: string
+          enum:
+          - cihub
+          - integration
+          description: 'Where the error originated. `integration` means the DAM/provider caused the problem.
+
+            `cihub` means the CI-HUB platform itself caused the problem.'
+        status:
+          type: number
+          description: HTTP status code mirrored in the response body for convenience.
+          examples:
+          - 400
+          - 401
+          - 403
+          - 404
+          - 409
+          - 501
+        message:
+          type: string
+          description: Human-readable error message safe to display to end users.
+          examples:
+          - Access denied by the integration
+          - Authentication token has expired
+        details:
+          anyOf:
+          - type: string
+          - type: object
+          description: 'Raw error detail from the provider or additional context. Optional.
+
+            Can be a simple string or a structured object with machine-readable context.
+
+            For integration errors this is typically the original DAM error forwarded as-is.'
+        provider:
+          type: string
+          description: 'Name of the integration/provider. Only present when `source` is `integration`.
+
+            Injected automatically by the server from the authenticated session.'
+          examples:
+          - bynder
+          - dropbox
+          - sharepoint
+      required:
+      - code
+      - source
+      - status
+      - message
+      description: 'Structured error object that provides machine-readable error classification.
+
+        Declared directly by migrated routes and adapters that use the error builder pattern, and
+
+        synthesized at the response layer for legacy string/Error failures (best-effort `code`/`source`
+
+        from the HTTP status and authenticated provider). The `source` field distinguishes CI-HUB
+
+        platform errors from integration/provider errors, allowing clients to programmatically route
+
+        errors to the correct team.'
+    ErrorEnvelope:
+      type: object
+      properties:
+        message:
+          type: string
+          const: Error
+          description: Always "Error". For the human-readable message use `error.message` instead.
+        details:
+          type: string
+          description: Request context and error summary.
+          examples:
+          - 'POST /api/v1/auth/exchangeToken failed: SDK authentication token is invalid'
+        errorCode:
+          type: string
+          description: Legacy mirror of `error.code`. New clients should switch on `error.code`.
+          examples:
+          - cihub-sdk-token-invalid
+        error:
+          $ref: '#/components/schemas/StructuredError'
+      required:
+      - message
+      - error
+      description: 'Standard error envelope returned by migrated routes. The `error` object carries the
+
+        machine-readable classification. `message`, `details`, and `errorCode` are legacy
+
+        mirrors kept for backward compatibility; new clients should read `error` only.'
+  securitySchemes:
+    cihubAccessToken:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: 'CI HUB access token returned by `POST /auth/exchangeToken`, sent as `Authorization: Bearer <access_token>`. HS256, 1 hour lifetime. Required on every call after the exchange. On `POST /auth/exchangeToken` itself this header instead carries the partner-signed RS256 JWT.'
+    damToken:
+      type: apiKey
+      in: header
+      name: provider-authorization
+      description: 'DAM connection token obtained from the provider login flow, sent as `provider-authorization: Bearer <DAM connection token>`. Required on calls that reach a specific DAM (folder browse, search, asset detail, versions, download, thumbnail). On `GET /auth/refreshToken` this header carries the CI HUB refresh token instead.'
+externalDocs:
+  description: CI HUB Access SDK reference
+  url: https://developer.ci-hub.com/access
+x-provenance:
+  method: derived
+  derived_by: API Evangelist enrichment pipeline
+  derived_on: '2026-08-12'
+  statement: 'CI HUB does not serve its OpenAPI document at a public URL. It does publish the document''s complete machine-readable projection: `@ci-hub/access-sdk` ships `dist/index.d.ts`, generated by `openapi-typescript` from the same OpenAPI specification that renders developer.ci-hub.com/access (''All request and response types are generated from the same OpenAPI specification that produces this reference''). This document is that projection walked back into OpenAPI 3.1. It is a derivation of a first-party artifact, not an authored specification.'
+  sources:
+  - what: paths, operationIds, summaries, descriptions, parameters, request bodies, responses, components.schemas / responses / parameters / requestBodies
+    from: npm @ci-hub/access-sdk@0.2.0 -> package/dist/index.d.ts (openapi-typescript emission, Apache-2.0)
+    url: https://registry.npmjs.org/@ci-hub/access-sdk/-/access-sdk-0.2.0.tgz
+    method: derived
+  - what: info.title, info.description, info.termsOfService, externalDocs, servers[]
+    from: CI HUB Access SDK documentation (openapi-typescript does not emit info/servers)
+    url: https://developer.ci-hub.com/access/llms-full.txt
+    method: searched
+  - what: components.securitySchemes and the security requirements applied per operation
+    from: 'the documented two-token pattern (Authorization: Bearer <CI HUB access token> plus provider-authorization: Bearer <DAM connection token>); openapi-typescript does not emit securitySchemes, so this restores information the projection drops rather than adding a new claim'
+    url: https://developer.ci-hub.com/access/authentication
+    method: searched
+  not_derived:
+  - operation tags (the projection carries none; grouping is recorded in overlays/ci-hub-access-overlay.yaml instead of being written into this document)
+  - in-spec examples beyond the @example values openapi-typescript preserved
+  verification:
+  - url: https://live.ci-hub.com/api/v1/auth/providers
+    http_status: 200
+    note: GET /auth/providers answers anonymously and returns the live provider catalogue, confirming the derived path and method.
+  - url: https://live.ci-hub.com/api/v1/system/providerInfo
+    http_status: 401
+    note: 'returns the derived ErrorEnvelope shape verbatim: {message, details, errorCode, error:{code, source, status, message, details}}.'
