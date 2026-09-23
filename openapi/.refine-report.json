@@ -1,0 +1,40 @@
+{
+  "provider": "ci-hub",
+  "sources": [
+    "_original/ci-hub-access-openapi.yml"
+  ],
+  "outputs": [
+    "ci-hub-assets-api-openapi.yml",
+    "ci-hub-auth-api-openapi.yml",
+    "ci-hub-system-api-openapi.yml"
+  ],
+  "archived": [],
+  "errors": [],
+  "warnings": [],
+  "notes": [
+    "sourced from openapi/_original/ (1 archived document(s)); previously refined output at the top level was skipped rather than re-split",
+    "ci-hub-access-openapi.yml: upgraded openapi 3.1.0 -> OpenAPI 3.2.0",
+    "ci-hub-access-openapi.yml: tagged paths POST /auth/exchangeToken -> Auth",
+    "ci-hub-access-openapi.yml: tagged paths GET /auth/checkToken -> Auth",
+    "ci-hub-access-openapi.yml: tagged paths GET /auth/refreshToken -> Auth",
+    "ci-hub-access-openapi.yml: tagged paths GET /auth/logout -> Auth",
+    "ci-hub-access-openapi.yml: tagged paths GET /auth/providers -> Auth",
+    "ci-hub-access-openapi.yml: tagged paths GET /auth/login -> Auth",
+    "ci-hub-access-openapi.yml: tagged paths POST /auth/login -> Auth",
+    "ci-hub-access-openapi.yml: tagged paths GET /system/providerInfo -> System",
+    "ci-hub-access-openapi.yml: tagged paths GET /assets/search -> Assets",
+    "ci-hub-access-openapi.yml: tagged paths POST /assets/search -> Assets",
+    "ci-hub-access-openapi.yml: tagged paths GET /assets/folder/{folderId} -> Assets",
+    "ci-hub-access-openapi.yml: tagged paths GET /assets/asset/{assetId} -> Assets",
+    "ci-hub-access-openapi.yml: tagged paths GET /assets/assetversions/{assetId} -> Assets",
+    "ci-hub-access-openapi.yml: declared missing tag: Assets",
+    "ci-hub-access-openapi.yml: declared missing tag: Auth",
+    "ci-hub-access-openapi.yml: declared missing tag: System",
+    "apis.yml register: already-registered"
+  ],
+  "skipped": [
+    "ci-hub-assets-api-openapi.yml: previously refined output, superseded by openapi/_original/",
+    "ci-hub-auth-api-openapi.yml: previously refined output, superseded by openapi/_original/",
+    "ci-hub-system-api-openapi.yml: previously refined output, superseded by openapi/_original/"
+  ]
+}
