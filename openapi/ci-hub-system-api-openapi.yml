@@ -81,33 +81,6 @@ paths:
       - System
 components:
   schemas:
-    ErrorEnvelope:
-      type: object
-      properties:
-        message:
-          type: string
-          const: Error
-          description: Always "Error". For the human-readable message use `error.message` instead.
-        details:
-          type: string
-          description: Request context and error summary.
-          examples:
-          - 'POST /api/v1/auth/exchangeToken failed: SDK authentication token is invalid'
-        errorCode:
-          type: string
-          description: Legacy mirror of `error.code`. New clients should switch on `error.code`.
-          examples:
-          - cihub-sdk-token-invalid
-        error:
-          $ref: '#/components/schemas/StructuredError'
-      required:
-      - message
-      - error
-      description: 'Standard error envelope returned by migrated routes. The `error` object carries the
-
-        machine-readable classification. `message`, `details`, and `errorCode` are legacy
-
-        mirrors kept for backward compatibility; new clients should read `error` only.'
     StructuredError:
       type: object
       properties:
@@ -180,6 +153,33 @@ components:
         platform errors from integration/provider errors, allowing clients to programmatically route
 
         errors to the correct team.'
+    ErrorEnvelope:
+      type: object
+      properties:
+        message:
+          type: string
+          const: Error
+          description: Always "Error". For the human-readable message use `error.message` instead.
+        details:
+          type: string
+          description: Request context and error summary.
+          examples:
+          - 'POST /api/v1/auth/exchangeToken failed: SDK authentication token is invalid'
+        errorCode:
+          type: string
+          description: Legacy mirror of `error.code`. New clients should switch on `error.code`.
+          examples:
+          - cihub-sdk-token-invalid
+        error:
+          $ref: '#/components/schemas/StructuredError'
+      required:
+      - message
+      - error
+      description: 'Standard error envelope returned by migrated routes. The `error` object carries the
+
+        machine-readable classification. `message`, `details`, and `errorCode` are legacy
+
+        mirrors kept for backward compatibility; new clients should read `error` only.'
   responses:
     BadRequest:
       description: '| Code | When |
@@ -191,6 +191,16 @@ components:
         | `cihub-internal-error` | The license check failed transiently. Legacy paths answer this with 400 for wire compatibility; it is retryable despite the 4xx status. |
 
         | `integration-operation-failed` | The DAM rejected the operation, or the adapter does not implement it. `provider` names the integration. |'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    InternalServerError:
+      description: '| Code | When |
+
+        |---|---|
+
+        | `cihub-internal-error` | Transient CI HUB failure. Safe to retry. |'
       content:
         application/json:
           schema:
@@ -565,16 +575,6 @@ components:
                 format: uri
                 examples:
                 - https://help.example.com/asset-search
-    InternalServerError:
-      description: '| Code | When |
-
-        |---|---|
-
-        | `cihub-internal-error` | Transient CI HUB failure. Safe to retry. |'
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorEnvelope'
   securitySchemes:
     cihubAccessToken:
       type: http
