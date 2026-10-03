@@ -80,131 +80,7 @@ paths:
       tags:
       - System
 components:
-  schemas:
-    StructuredError:
-      type: object
-      properties:
-        code:
-          type: string
-          description: 'Machine-readable error code. Format: `{source}-{error-type}` in kebab-case.
-
-            Clients can switch on this field to handle specific error types.'
-          examples:
-          - integration-forbidden
-          - integration-auth-failed
-          - cihub-access-token-invalid
-          - cihub-license-required
-          - cihub-unknown-error
-        source:
-          type: string
-          enum:
-          - cihub
-          - integration
-          description: 'Where the error originated. `integration` means the DAM/provider caused the problem.
-
-            `cihub` means the CI-HUB platform itself caused the problem.'
-        status:
-          type: number
-          description: HTTP status code mirrored in the response body for convenience.
-          examples:
-          - 400
-          - 401
-          - 403
-          - 404
-          - 409
-          - 501
-        message:
-          type: string
-          description: Human-readable error message safe to display to end users.
-          examples:
-          - Access denied by the integration
-          - Authentication token has expired
-        details:
-          anyOf:
-          - type: string
-          - type: object
-          description: 'Raw error detail from the provider or additional context. Optional.
-
-            Can be a simple string or a structured object with machine-readable context.
-
-            For integration errors this is typically the original DAM error forwarded as-is.'
-        provider:
-          type: string
-          description: 'Name of the integration/provider. Only present when `source` is `integration`.
-
-            Injected automatically by the server from the authenticated session.'
-          examples:
-          - bynder
-          - dropbox
-          - sharepoint
-      required:
-      - code
-      - source
-      - status
-      - message
-      description: 'Structured error object that provides machine-readable error classification.
-
-        Declared directly by migrated routes and adapters that use the error builder pattern, and
-
-        synthesized at the response layer for legacy string/Error failures (best-effort `code`/`source`
-
-        from the HTTP status and authenticated provider). The `source` field distinguishes CI-HUB
-
-        platform errors from integration/provider errors, allowing clients to programmatically route
-
-        errors to the correct team.'
-    ErrorEnvelope:
-      type: object
-      properties:
-        message:
-          type: string
-          const: Error
-          description: Always "Error". For the human-readable message use `error.message` instead.
-        details:
-          type: string
-          description: Request context and error summary.
-          examples:
-          - 'POST /api/v1/auth/exchangeToken failed: SDK authentication token is invalid'
-        errorCode:
-          type: string
-          description: Legacy mirror of `error.code`. New clients should switch on `error.code`.
-          examples:
-          - cihub-sdk-token-invalid
-        error:
-          $ref: '#/components/schemas/StructuredError'
-      required:
-      - message
-      - error
-      description: 'Standard error envelope returned by migrated routes. The `error` object carries the
-
-        machine-readable classification. `message`, `details`, and `errorCode` are legacy
-
-        mirrors kept for backward compatibility; new clients should read `error` only.'
   responses:
-    BadRequest:
-      description: '| Code | When |
-
-        |---|---|
-
-        | `cihub-bad-request` | A required parameter is missing or invalid. |
-
-        | `cihub-internal-error` | The license check failed transiently. Legacy paths answer this with 400 for wire compatibility; it is retryable despite the 4xx status. |
-
-        | `integration-operation-failed` | The DAM rejected the operation, or the adapter does not implement it. `provider` names the integration. |'
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorEnvelope'
-    InternalServerError:
-      description: '| Code | When |
-
-        |---|---|
-
-        | `cihub-internal-error` | Transient CI HUB failure. Safe to retry. |'
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorEnvelope'
     ProviderInfoResponse:
       description: '@description Provider-specific information, capabilities, and configuration that is available after logging in to the provider.'
       content:
@@ -575,6 +451,130 @@ components:
                 format: uri
                 examples:
                 - https://help.example.com/asset-search
+    BadRequest:
+      description: '| Code | When |
+
+        |---|---|
+
+        | `cihub-bad-request` | A required parameter is missing or invalid. |
+
+        | `cihub-internal-error` | The license check failed transiently. Legacy paths answer this with 400 for wire compatibility; it is retryable despite the 4xx status. |
+
+        | `integration-operation-failed` | The DAM rejected the operation, or the adapter does not implement it. `provider` names the integration. |'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    InternalServerError:
+      description: '| Code | When |
+
+        |---|---|
+
+        | `cihub-internal-error` | Transient CI HUB failure. Safe to retry. |'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+  schemas:
+    StructuredError:
+      type: object
+      properties:
+        code:
+          type: string
+          description: 'Machine-readable error code. Format: `{source}-{error-type}` in kebab-case.
+
+            Clients can switch on this field to handle specific error types.'
+          examples:
+          - integration-forbidden
+          - integration-auth-failed
+          - cihub-access-token-invalid
+          - cihub-license-required
+          - cihub-unknown-error
+        source:
+          type: string
+          enum:
+          - cihub
+          - integration
+          description: 'Where the error originated. `integration` means the DAM/provider caused the problem.
+
+            `cihub` means the CI-HUB platform itself caused the problem.'
+        status:
+          type: number
+          description: HTTP status code mirrored in the response body for convenience.
+          examples:
+          - 400
+          - 401
+          - 403
+          - 404
+          - 409
+          - 501
+        message:
+          type: string
+          description: Human-readable error message safe to display to end users.
+          examples:
+          - Access denied by the integration
+          - Authentication token has expired
+        details:
+          anyOf:
+          - type: string
+          - type: object
+          description: 'Raw error detail from the provider or additional context. Optional.
+
+            Can be a simple string or a structured object with machine-readable context.
+
+            For integration errors this is typically the original DAM error forwarded as-is.'
+        provider:
+          type: string
+          description: 'Name of the integration/provider. Only present when `source` is `integration`.
+
+            Injected automatically by the server from the authenticated session.'
+          examples:
+          - bynder
+          - dropbox
+          - sharepoint
+      required:
+      - code
+      - source
+      - status
+      - message
+      description: 'Structured error object that provides machine-readable error classification.
+
+        Declared directly by migrated routes and adapters that use the error builder pattern, and
+
+        synthesized at the response layer for legacy string/Error failures (best-effort `code`/`source`
+
+        from the HTTP status and authenticated provider). The `source` field distinguishes CI-HUB
+
+        platform errors from integration/provider errors, allowing clients to programmatically route
+
+        errors to the correct team.'
+    ErrorEnvelope:
+      type: object
+      properties:
+        message:
+          type: string
+          const: Error
+          description: Always "Error". For the human-readable message use `error.message` instead.
+        details:
+          type: string
+          description: Request context and error summary.
+          examples:
+          - 'POST /api/v1/auth/exchangeToken failed: SDK authentication token is invalid'
+        errorCode:
+          type: string
+          description: Legacy mirror of `error.code`. New clients should switch on `error.code`.
+          examples:
+          - cihub-sdk-token-invalid
+        error:
+          $ref: '#/components/schemas/StructuredError'
+      required:
+      - message
+      - error
+      description: 'Standard error envelope returned by migrated routes. The `error` object carries the
+
+        machine-readable classification. `message`, `details`, and `errorCode` are legacy
+
+        mirrors kept for backward compatibility; new clients should read `error` only.'
   securitySchemes:
     cihubAccessToken:
       type: http

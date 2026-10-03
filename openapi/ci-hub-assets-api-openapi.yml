@@ -223,152 +223,234 @@ paths:
       tags:
       - Assets
 components:
-  parameters:
-    size:
-      name: size
-      in: query
-      schema:
-        type: string
-      description: Number of assets to return per page. The maximum value is also specified by the provider in the server configuration. The smaller of the two values will be used.
-      examples:
-        example1:
-          value: 50
-    dataLocale:
-      name: dataLocale
-      in: query
-      schema:
-        type: string
-      description: If the provider supports data localization, this is the locale for the content of the data (e.g., values of metadata fields). You can find the supported data locales of the provider in the response of the /system/providerInfo route. Send the id of the locale here.
-      examples:
-        example1:
-          value: de-DE
-    timeZone:
-      name: timeZone
-      in: query
-      schema:
-        type: string
-      description: 'Only used for AdmiralCloud and Asana.
+  responses:
+    Unauthorized:
+      description: '| Code | When |
 
-        Timezone for date/time formatting. It expects a valid timezone based on the Intl.DateTimeFormat library.
+        |---|---|
 
-        Use Intl.DateTimeFormat().resolvedOptions().timeZone to get the timezone of the user.
+        | `cihub-access-token-missing` | No `Authorization` header. |
 
-        See https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/DateTimeFormat/resolvedOptions#timezone for more information.'
-      examples:
-        example1:
-          value: Africa/Tunis
-    filters:
-      name: filters
-      in: query
-      schema:
-        type: array
-        items:
-          type: string
-      description: List of filters to apply to the search. An array of option ids is expected here. You can optain them in the response of the previous call to this endpoint inside each filter in the `filters` property.
-      examples:
-        example1:
-          value:
-          - file_type:jpg
-          - category:marketing
-    uiLocale:
-      name: uiLocale
-      in: query
-      schema:
-        type: string
-        enum:
-        - en
-        - de
-        - fr
-        - es
-        - ja
-        - zh
-      description: Locale for user interface elements. For example, labels of metadata fields. Only the locales in the enum are supported. When omitted, providers fall back to `en`.
-      examples:
-        example1:
-          value: en
-    more:
-      name: more
-      in: query
-      schema:
-        type: string
-      description: Token for continuing a previous request on the next page. Should be set to the value of `more` as received by the previous call to this endpoint.
-      examples:
-        example1:
-          value: next_page_token
-  schemas:
-    ErrorEnvelope:
-      type: object
-      properties:
-        message:
-          type: string
-          const: Error
-          description: Always "Error". For the human-readable message use `error.message` instead.
-        details:
-          type: string
-          description: Request context and error summary.
-          examples:
-          - 'POST /api/v1/auth/exchangeToken failed: SDK authentication token is invalid'
-        errorCode:
-          type: string
-          description: Legacy mirror of `error.code`. New clients should switch on `error.code`.
-          examples:
-          - cihub-sdk-token-invalid
-        error:
-          $ref: '#/components/schemas/StructuredError'
-      required:
-      - message
-      - error
-      description: 'Standard error envelope returned by migrated routes. The `error` object carries the
+        | `cihub-access-token-invalid` | CI HUB token signature failed, expired, or the user record was removed. |
 
-        machine-readable classification. `message`, `details`, and `errorCode` are legacy
-
-        mirrors kept for backward compatibility; new clients should read `error` only.'
-    AssetNavigationFilter:
-      type: object
-      properties:
-        id:
-          type: string
-          description: Unique identifier for the filter
-          examples:
-          - file_type
-        name:
-          type: string
-          description: Display name of the filter
-          examples:
-          - File Type
-        options:
-          type: array
-          items:
+        | `integration-auth-failed` | The DAM connection token expired, was invalid, or its refresh failed. Renew the DAM connection. `provider` names the integration. |'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    GetFolderResponse:
+      description: '@description Folder contents retrieved successfully'
+      content:
+        application/json:
+          schema:
             type: object
             properties:
               id:
                 type: string
-                description: Unique identifier for the filter option
+                description: Unique identifier for the folder
                 examples:
-                - fileType:jpg
-              isActive:
-                type: boolean
-                description: Whether this filter option is currently active
-                examples:
-                - false
+                - folder_12345
               name:
                 type: string
-                description: Display name of the filter option
+                description: Display name of the folder
                 examples:
-                - JPG Images
-              count:
+                - Marketing Assets 2024
+              more:
+                type: string
+                description: Pagination cursor for next page of assets. This needs to be set in the `more` parameter of the next request if you want to get the next page.
+                examples:
+                - next_page_token
+              capabilities:
+                $ref: '#/components/schemas/FolderCapabilities'
+              folders:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Folder'
+                description: '@description Array of subfolders within this folder'
+              assets:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Asset'
+                description: '@description Array of assets within this folder'
+              filters:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AssetNavigationFilter'
+                description: '@description Available filters.'
+              totalAssetsCount:
                 type: number
-                description: Number of assets matching this filter option
+                description: Total number of assets in this folder.
                 examples:
-                - 45
+                - 150
             required:
             - id
-            - isActive
+            - more
+            - capabilities
+            - folders
+            - assets
+            - totalAssetsCount
+    Forbidden:
+      description: '| Code | When |
+
+        |---|---|
+
+        | `provider-access-token-missing` | No `provider-authorization` header. Complete a DAM login first. |
+
+        | `provider-access-token-invalid` | The `provider-authorization` token failed verification or expired. Start a new DAM login. |
+
+        | `integration-forbidden` | The DAM denied access (permissions, roles). `provider` names the integration. |'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    GetAssetVersionsResponse:
+      description: '@description Version history for the asset.'
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              id:
+                type: string
+                description: '@description Asset identifier'
+              name:
+                type: string
+                description: '@description Asset name'
+              versions:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Asset'
+                description: '@description Array of asset versions'
+            required:
+            - id
             - name
-      required:
-      - id
-      - name
-      - options
+            - versions
+    SearchAssetsResponse:
+      description: '@description Assets found'
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              assets:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Asset'
+                description: '@description List of assets matching the search criteria'
+              folders:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Folder'
+                description: '@description Only returned for complex objects that are displayed also as folders.'
+              filters:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AssetNavigationFilter'
+                description: '@description Available filters.'
+              more:
+                type: string
+                description: Pagination cursor for next page of assets. This needs to be set in the `more` parameter of the next request if you want to get the next page.
+                examples:
+                - next_page_token
+              capabilities:
+                type: object
+                properties:
+                  canAddAsset:
+                    type: boolean
+                    description: Whether the user has permission to upload assets in the search context
+                    examples:
+                    - true
+                description: '@description Used to flag if the user has permission to upload assets in the search view.'
+              totalAssetsCount:
+                type: number
+                description: Total number of assets matching the search criteria.
+                examples:
+                - 150
+            required:
+            - assets
+            - folders
+            - filters
+            - more
+            - totalAssetsCount
+    BadRequest:
+      description: '| Code | When |
+
+        |---|---|
+
+        | `cihub-bad-request` | A required parameter is missing or invalid. |
+
+        | `cihub-internal-error` | The license check failed transiently. Legacy paths answer this with 400 for wire compatibility; it is retryable despite the 4xx status. |
+
+        | `integration-operation-failed` | The DAM rejected the operation, or the adapter does not implement it. `provider` names the integration. |'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    InternalServerError:
+      description: '| Code | When |
+
+        |---|---|
+
+        | `cihub-internal-error` | Transient CI HUB failure. Safe to retry. |'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    NotFound:
+      description: '| Code | When |
+
+        |---|---|
+
+        | `integration-not-found` | The asset, folder, or version does not exist in the DAM, or the DAM does not support this lookup. `provider` names the integration. |
+
+
+        Some legacy paths answer 404 with an empty or plain-text body instead of the
+
+        envelope. Treat any 404 as not-found regardless of body shape.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    NotImplemented:
+      description: '| Code | When |
+
+        |---|---|
+
+        | `integration-not-implemented` | The adapter has not implemented this operation yet. |
+
+        | `integration-not-supported` | The DAM has no equivalent feature. |
+
+
+        `provider` names the integration in both cases.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+  schemas:
+    FolderCapabilities:
+      type: object
+      properties:
+        canDeleteFolder:
+          type: boolean
+          description: Whether the user has permission to delete this folder
+          examples:
+          - true
+        canAddFolder:
+          type: boolean
+          description: Whether the user has permission to create subfolders within this folder
+          examples:
+          - true
+        canAddAsset:
+          type: boolean
+          description: Whether the user has permission to upload assets to this folder
+          examples:
+          - true
+        canRenameFolder:
+          type: boolean
+          description: Whether the user has permission to rename this folder
+          examples:
+          - true
+      description: '@description Folder capabilities. Used to determine if the user has permission to delete, create subfolders and upload assets to this folder.'
     CustomMetadataField:
       type: object
       properties:
@@ -803,30 +885,104 @@ components:
       - type
       - conversions
       description: '@description Asset object.'
-    FolderCapabilities:
+    AssetCapabilities:
       type: object
       properties:
-        canDeleteFolder:
+        canDeleteAsset:
           type: boolean
-          description: Whether the user has permission to delete this folder
-          examples:
-          - true
-        canAddFolder:
+          description: '@description Whether the asset can be deleted'
+        canUpdateAsset:
           type: boolean
-          description: Whether the user has permission to create subfolders within this folder
-          examples:
-          - true
-        canAddAsset:
+          description: '@description Whether the asset can be updated'
+        canLockAsset:
           type: boolean
-          description: Whether the user has permission to upload assets to this folder
-          examples:
-          - true
-        canRenameFolder:
+          description: '@description Whether the asset can be locked'
+        canUnlockAsset:
           type: boolean
-          description: Whether the user has permission to rename this folder
+          description: '@description Whether the asset can be unlocked'
+        canRenameAsset:
+          type: boolean
+          description: '@description Whether the asset can be renamed'
+        uploadExtensions:
+          type: array
+          items:
+            type: string
+          description: '@description The extensions that the asset can be updated with. Normally assets can only be updated with the same extension as the original asset. When this is set, the asset can be updated with the extensions in the array.'
+      required:
+      - canDeleteAsset
+      - canUpdateAsset
+      - canLockAsset
+      - canUnlockAsset
+      - canRenameAsset
+      description: '@description Asset capabilities. Used to determine if the user has permission to delete, update, lock and unlock this asset.'
+    AssetNavigationFilter:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique identifier for the filter
           examples:
-          - true
-      description: '@description Folder capabilities. Used to determine if the user has permission to delete, create subfolders and upload assets to this folder.'
+          - file_type
+        name:
+          type: string
+          description: Display name of the filter
+          examples:
+          - File Type
+        options:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                description: Unique identifier for the filter option
+                examples:
+                - fileType:jpg
+              isActive:
+                type: boolean
+                description: Whether this filter option is currently active
+                examples:
+                - false
+              name:
+                type: string
+                description: Display name of the filter option
+                examples:
+                - JPG Images
+              count:
+                type: number
+                description: Number of assets matching this filter option
+                examples:
+                - 45
+            required:
+            - id
+            - isActive
+            - name
+      required:
+      - id
+      - name
+      - options
+    Folder:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique identifier for the folder
+          examples:
+          - folder_12345
+        name:
+          type: string
+          description: Display name of the folder
+          examples:
+          - Summer Campaign 2024
+        relatedAssetId:
+          type: string
+          description: ID of the related asset. Sometimes an asset is a complex object, meaning we handle it as an asset as well as a folder. A folder meaning, it can have assets inside it, but also we can display it as an asset. This is the Id to display this complex object as an asset.
+          examples:
+          - asset_123
+      required:
+      - id
+      - name
+      description: '@description Raw Folder object.'
     StructuredError:
       type: object
       properties:
@@ -899,261 +1055,105 @@ components:
         platform errors from integration/provider errors, allowing clients to programmatically route
 
         errors to the correct team.'
-    AssetCapabilities:
+    ErrorEnvelope:
       type: object
       properties:
-        canDeleteAsset:
-          type: boolean
-          description: '@description Whether the asset can be deleted'
-        canUpdateAsset:
-          type: boolean
-          description: '@description Whether the asset can be updated'
-        canLockAsset:
-          type: boolean
-          description: '@description Whether the asset can be locked'
-        canUnlockAsset:
-          type: boolean
-          description: '@description Whether the asset can be unlocked'
-        canRenameAsset:
-          type: boolean
-          description: '@description Whether the asset can be renamed'
-        uploadExtensions:
-          type: array
-          items:
-            type: string
-          description: '@description The extensions that the asset can be updated with. Normally assets can only be updated with the same extension as the original asset. When this is set, the asset can be updated with the extensions in the array.'
+        message:
+          type: string
+          const: Error
+          description: Always "Error". For the human-readable message use `error.message` instead.
+        details:
+          type: string
+          description: Request context and error summary.
+          examples:
+          - 'POST /api/v1/auth/exchangeToken failed: SDK authentication token is invalid'
+        errorCode:
+          type: string
+          description: Legacy mirror of `error.code`. New clients should switch on `error.code`.
+          examples:
+          - cihub-sdk-token-invalid
+        error:
+          $ref: '#/components/schemas/StructuredError'
       required:
-      - canDeleteAsset
-      - canUpdateAsset
-      - canLockAsset
-      - canUnlockAsset
-      - canRenameAsset
-      description: '@description Asset capabilities. Used to determine if the user has permission to delete, update, lock and unlock this asset.'
-    Folder:
-      type: object
-      properties:
-        id:
+      - message
+      - error
+      description: 'Standard error envelope returned by migrated routes. The `error` object carries the
+
+        machine-readable classification. `message`, `details`, and `errorCode` are legacy
+
+        mirrors kept for backward compatibility; new clients should read `error` only.'
+  parameters:
+    filters:
+      name: filters
+      in: query
+      schema:
+        type: array
+        items:
           type: string
-          description: Unique identifier for the folder
-          examples:
-          - folder_12345
-        name:
-          type: string
-          description: Display name of the folder
-          examples:
-          - Summer Campaign 2024
-        relatedAssetId:
-          type: string
-          description: ID of the related asset. Sometimes an asset is a complex object, meaning we handle it as an asset as well as a folder. A folder meaning, it can have assets inside it, but also we can display it as an asset. This is the Id to display this complex object as an asset.
-          examples:
-          - asset_123
-      required:
-      - id
-      - name
-      description: '@description Raw Folder object.'
-  responses:
-    Forbidden:
-      description: '| Code | When |
+      description: List of filters to apply to the search. An array of option ids is expected here. You can optain them in the response of the previous call to this endpoint inside each filter in the `filters` property.
+      examples:
+        example1:
+          value:
+          - file_type:jpg
+          - category:marketing
+    timeZone:
+      name: timeZone
+      in: query
+      schema:
+        type: string
+      description: 'Only used for AdmiralCloud and Asana.
 
-        |---|---|
+        Timezone for date/time formatting. It expects a valid timezone based on the Intl.DateTimeFormat library.
 
-        | `provider-access-token-missing` | No `provider-authorization` header. Complete a DAM login first. |
+        Use Intl.DateTimeFormat().resolvedOptions().timeZone to get the timezone of the user.
 
-        | `provider-access-token-invalid` | The `provider-authorization` token failed verification or expired. Start a new DAM login. |
-
-        | `integration-forbidden` | The DAM denied access (permissions, roles). `provider` names the integration. |'
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorEnvelope'
-    GetAssetVersionsResponse:
-      description: '@description Version history for the asset.'
-      content:
-        application/json:
-          schema:
-            type: object
-            properties:
-              id:
-                type: string
-                description: '@description Asset identifier'
-              name:
-                type: string
-                description: '@description Asset name'
-              versions:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Asset'
-                description: '@description Array of asset versions'
-            required:
-            - id
-            - name
-            - versions
-    NotFound:
-      description: '| Code | When |
-
-        |---|---|
-
-        | `integration-not-found` | The asset, folder, or version does not exist in the DAM, or the DAM does not support this lookup. `provider` names the integration. |
-
-
-        Some legacy paths answer 404 with an empty or plain-text body instead of the
-
-        envelope. Treat any 404 as not-found regardless of body shape.'
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorEnvelope'
-    SearchAssetsResponse:
-      description: '@description Assets found'
-      content:
-        application/json:
-          schema:
-            type: object
-            properties:
-              assets:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Asset'
-                description: '@description List of assets matching the search criteria'
-              folders:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Folder'
-                description: '@description Only returned for complex objects that are displayed also as folders.'
-              filters:
-                type: array
-                items:
-                  $ref: '#/components/schemas/AssetNavigationFilter'
-                description: '@description Available filters.'
-              more:
-                type: string
-                description: Pagination cursor for next page of assets. This needs to be set in the `more` parameter of the next request if you want to get the next page.
-                examples:
-                - next_page_token
-              capabilities:
-                type: object
-                properties:
-                  canAddAsset:
-                    type: boolean
-                    description: Whether the user has permission to upload assets in the search context
-                    examples:
-                    - true
-                description: '@description Used to flag if the user has permission to upload assets in the search view.'
-              totalAssetsCount:
-                type: number
-                description: Total number of assets matching the search criteria.
-                examples:
-                - 150
-            required:
-            - assets
-            - folders
-            - filters
-            - more
-            - totalAssetsCount
-    BadRequest:
-      description: '| Code | When |
-
-        |---|---|
-
-        | `cihub-bad-request` | A required parameter is missing or invalid. |
-
-        | `cihub-internal-error` | The license check failed transiently. Legacy paths answer this with 400 for wire compatibility; it is retryable despite the 4xx status. |
-
-        | `integration-operation-failed` | The DAM rejected the operation, or the adapter does not implement it. `provider` names the integration. |'
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorEnvelope'
-    InternalServerError:
-      description: '| Code | When |
-
-        |---|---|
-
-        | `cihub-internal-error` | Transient CI HUB failure. Safe to retry. |'
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorEnvelope'
-    Unauthorized:
-      description: '| Code | When |
-
-        |---|---|
-
-        | `cihub-access-token-missing` | No `Authorization` header. |
-
-        | `cihub-access-token-invalid` | CI HUB token signature failed, expired, or the user record was removed. |
-
-        | `integration-auth-failed` | The DAM connection token expired, was invalid, or its refresh failed. Renew the DAM connection. `provider` names the integration. |'
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorEnvelope'
-    NotImplemented:
-      description: '| Code | When |
-
-        |---|---|
-
-        | `integration-not-implemented` | The adapter has not implemented this operation yet. |
-
-        | `integration-not-supported` | The DAM has no equivalent feature. |
-
-
-        `provider` names the integration in both cases.'
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorEnvelope'
-    GetFolderResponse:
-      description: '@description Folder contents retrieved successfully'
-      content:
-        application/json:
-          schema:
-            type: object
-            properties:
-              id:
-                type: string
-                description: Unique identifier for the folder
-                examples:
-                - folder_12345
-              name:
-                type: string
-                description: Display name of the folder
-                examples:
-                - Marketing Assets 2024
-              more:
-                type: string
-                description: Pagination cursor for next page of assets. This needs to be set in the `more` parameter of the next request if you want to get the next page.
-                examples:
-                - next_page_token
-              capabilities:
-                $ref: '#/components/schemas/FolderCapabilities'
-              folders:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Folder'
-                description: '@description Array of subfolders within this folder'
-              assets:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Asset'
-                description: '@description Array of assets within this folder'
-              filters:
-                type: array
-                items:
-                  $ref: '#/components/schemas/AssetNavigationFilter'
-                description: '@description Available filters.'
-              totalAssetsCount:
-                type: number
-                description: Total number of assets in this folder.
-                examples:
-                - 150
-            required:
-            - id
-            - more
-            - capabilities
-            - folders
-            - assets
-            - totalAssetsCount
+        See https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/DateTimeFormat/resolvedOptions#timezone for more information.'
+      examples:
+        example1:
+          value: Africa/Tunis
+    dataLocale:
+      name: dataLocale
+      in: query
+      schema:
+        type: string
+      description: If the provider supports data localization, this is the locale for the content of the data (e.g., values of metadata fields). You can find the supported data locales of the provider in the response of the /system/providerInfo route. Send the id of the locale here.
+      examples:
+        example1:
+          value: de-DE
+    more:
+      name: more
+      in: query
+      schema:
+        type: string
+      description: Token for continuing a previous request on the next page. Should be set to the value of `more` as received by the previous call to this endpoint.
+      examples:
+        example1:
+          value: next_page_token
+    size:
+      name: size
+      in: query
+      schema:
+        type: string
+      description: Number of assets to return per page. The maximum value is also specified by the provider in the server configuration. The smaller of the two values will be used.
+      examples:
+        example1:
+          value: 50
+    uiLocale:
+      name: uiLocale
+      in: query
+      schema:
+        type: string
+        enum:
+        - en
+        - de
+        - fr
+        - es
+        - ja
+        - zh
+      description: Locale for user interface elements. For example, labels of metadata fields. Only the locales in the enum are supported. When omitted, providers fall back to `en`.
+      examples:
+        example1:
+          value: en
   requestBodies:
     requestBody:
       content:
